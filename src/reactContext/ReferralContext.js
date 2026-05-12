@@ -183,7 +183,7 @@ export const ReferralProvider = ({ children }) => {
 
     const botUsername =
       process.env.REACT_APP_BOT_USERNAME ||
-      "Web3TodayGameAppTelegram_bot";
+      "orgtelegramapp_bot";
 
     const code = btoa(`${user.id}_${Date.now()}`)
       .replace(/[^a-zA-Z0-9]/g, "")
