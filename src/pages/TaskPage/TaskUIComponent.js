@@ -293,11 +293,11 @@ export default function TasksPage() {
       } else if (task.type === "partnership" || task.type === "referral") {
          navigate("/network");
          return;
+      } else if (task.category === "weekly" && (task.title.toLowerCase().includes("daily") || task.description?.toLowerCase().includes("daily") || !task.url)) {
+         setActiveTab("daily");
+         return;
       } else if (task.url) {
          window.open(task.url, "_blank");
-         return;
-      } else if (task.category === "weekly" && (task.title.toLowerCase().includes("daily") || task.description?.toLowerCase().includes("daily"))) {
-         setActiveTab("daily");
          return;
       }
     }
