@@ -24,7 +24,11 @@ export default function TasksPage() {
   
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [videoTimer, setVideoTimer] = useState(0);
-  const [activeTaskId, setActiveTaskId] = useState(null);
+  const [activeTask, setActiveTask] = useState(null);
+
+  const [verifyTask, setVerifyTask] = useState(null);
+  const [verifyCodeInput, setVerifyCodeInput] = useState("");
+  const [verifyError, setVerifyError] = useState("");
 
   const [newsCount, setNewsCount] = useState(0);
   const [gameCompleted, setGameCompleted] = useState(false);
@@ -241,19 +245,31 @@ export default function TasksPage() {
     
     if (!isCompleted) {
       if (task.type === "watch") {
-        await update(ref(database, `connections/${userId}/tasks/${task.category}/${taskId}`), {
-          started: true,
-          lastStartedAt: Date.now()
-        });
-        
-        if (task.videoUrl) {
-           setSelectedVideo(task.videoUrl);
-           setVideoTimer(30);
-           setActiveTaskId(taskId);
-        } else if (task.url) {
-           window.open(task.url, "_blank");
+        if (!task.started) {
+          await update(ref(database, `connections/${userId}/tasks/${task.category}/${taskId}`), {
+            started: true,
+            lastStartedAt: Date.now()
+          });
+          
+          if (task.videoUrl) {
+             setSelectedVideo(task.videoUrl);
+             setVideoTimer(30);
+             setActiveTask(task);
+          } else if (task.url) {
+             window.open(task.url, "_blank");
+          }
+
+          if (!task.watchCode) {
+             await update(ref(database, `connections/${userId}/tasks/${task.category}/${taskId}`), {
+               completed: true,
+               progress: 1
+             });
+          }
+          return;
+        } else if (task.watchCode) {
+          setVerifyTask(task);
+          return;
         }
-        return;
       } else if (task.type === "social") {
          setButtonText(prev => ({ ...prev, [taskId]: "Checking..." }));
          window.open(task.url, "_blank");
@@ -432,7 +448,7 @@ export default function TasksPage() {
                                 : (
                                   task.isTaskCompleted
                                     ? "Claim"
-                                    : buttonText[task.id] || "Start Task"
+                                    : (task.type === "watch" && task.started && task.watchCode ? "Enter Code" : (buttonText[task.id] || "Start Task"))
                                 )
                               }
                             </button>
@@ -539,7 +555,7 @@ export default function TasksPage() {
                                   : (
                                       task.isTaskCompleted
                                       ? "Claim"
-                                      : buttonText[taskId] || "Start Task"
+                                      : (task.type === "watch" && task.started && task.watchCode ? "Enter Code" : (buttonText[taskId] || "Start Task"))
                                   )
                                 }
                               </button>
@@ -595,10 +611,9 @@ export default function TasksPage() {
               <button
                 disabled={videoTimer > 0}
                 onClick={async () => {
-                  if (activeTaskId) {
-                    const userTasksRef = ref(database, `connections/${user.id}`);
-                    await update(userTasksRef, { [activeTaskId]: false });
-                    setButtonText(prev => ({ ...prev, [activeTaskId]: "Claim" }));
+                  if (activeTask) {
+                    const userTaskRef = ref(database, `connections/${user.id}/tasks/${activeTask.category}/${activeTask.id}`);
+                    await update(userTaskRef, { completed: true, progress: 1 });
                   }
                   setSelectedVideo(null);
                 }}
@@ -609,6 +624,55 @@ export default function TasksPage() {
               >
                 {videoTimer > 0 ? `Wait ${videoTimer}s` : "Claim Reward"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Verify Code Modal Popup */}
+      {verifyTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-gray-900 border border-white/10 rounded-xl overflow-hidden w-full max-w-md shadow-2xl relative animate-in fade-in zoom-in duration-200">
+            <div className="flex justify-between items-center p-4 border-b border-white/10 bg-white/5">
+              <h3 className="text-white font-medium">Enter Secret Code</h3>
+              <button
+                onClick={() => { setVerifyTask(null); setVerifyCodeInput(""); setVerifyError(""); }}
+                className="text-white/70 hover:text-white p-1 hover:bg-white/10 rounded-full transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-white/80 text-sm mb-4">
+                Please enter the secret code shown in the video to complete this task.
+              </p>
+              <input
+                type="text"
+                value={verifyCodeInput}
+                onChange={e => setVerifyCodeInput(e.target.value)}
+                placeholder="Enter code here"
+                className="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-white mb-2 focus:outline-none focus:border-indigo-500"
+              />
+              {verifyError && <p className="text-red-400 text-xs mb-4">{verifyError}</p>}
+              
+              <Button
+                onClick={async () => {
+                  if (verifyCodeInput.trim().toLowerCase() === verifyTask.watchCode.trim().toLowerCase()) {
+                    await update(ref(database, `connections/${userId}/tasks/${verifyTask.category}/${verifyTask.id}`), {
+                      completed: true,
+                      progress: 1
+                    });
+                    setVerifyTask(null);
+                    setVerifyCodeInput("");
+                    setVerifyError("");
+                  } else {
+                    setVerifyError("Wrong code. Please try again.");
+                  }
+                }}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-6"
+              >
+                Verify & Complete
+              </Button>
             </div>
           </div>
         </div>
