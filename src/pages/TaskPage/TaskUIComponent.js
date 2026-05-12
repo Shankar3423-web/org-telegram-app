@@ -144,7 +144,7 @@ export default function TasksPage() {
     return task.claimed === true;
   };
 
-  const handleDailyCompletionForWeekly = async () => {
+  const handleDailyCompletionForWeekly = useCallback(async () => {
     if (dailyTasks.length === 0) return;
 
     const allCompleted = dailyTasks.every(task => task.isTaskCompleted);
@@ -174,7 +174,13 @@ export default function TasksPage() {
       }
     }
     await set(lastDateRef, today);
-  };
+  }, [dailyTasks, tasks.weekly, userId]);
+
+  useEffect(() => {
+    if (dailyTasks.length > 0 && dailyTasks.every(task => task.isTaskCompleted)) {
+      handleDailyCompletionForWeekly();
+    }
+  }, [dailyTasks, handleDailyCompletionForWeekly]);
 
   const fetchChatMember = async (chatId) => {
     try {
