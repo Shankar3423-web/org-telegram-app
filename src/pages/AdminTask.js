@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ref, push, set, onValue, remove, update } from "firebase/database";
+import { ref, push, set, onValue, remove, update, get } from "firebase/database";
 import { database } from "../services/FirebaseConfig";
 import { Plus, Pencil, Trash2, X, Save, Zap, LayoutDashboard, Newspaper, FileText, Target, Tag, Layers, Link as LinkIcon, Code } from "lucide-react";
 import { ToastContainer, toast } from "react-toastify";
@@ -117,9 +117,43 @@ export default function AdminTask() {
   };
 
   const handleDelete = async task => {
-    if (!window.confirm("Delete task?")) return;
-    await remove(ref(database, `tasks/${task.category}/${task.id}`));
-    toast.success("Task deleted");
+    if (!window.confirm("Delete task and reset progress for all users?")) return;
+    
+    toast.info("Deleting task and resetting progress...");
+    try {
+      // 1. Remove the task from the main collection
+      await remove(ref(database, `tasks/${task.category}/${task.id}`));
+      
+      // 2. Fetch all users to reset their progress for this specific task
+      const usersSnap = await get(ref(database, 'connections'));
+      if (usersSnap.exists()) {
+        const connections = usersSnap.val();
+        const updates = {};
+        
+        Object.keys(connections).forEach(userId => {
+          // Clear specific task progress
+          updates[`connections/${userId}/tasks/${task.category}/${task.id}`] = null;
+          
+          // Clear shared tracking nodes if applicable
+          if (task.type === "news") {
+            updates[`connections/${userId}/tasks/${task.category}/news`] = null;
+          }
+          if (task.type === "game") {
+            updates[`connections/${userId}/tasks/${task.category}/game`] = null;
+          }
+        });
+        
+        // Execute batch update to remove all references
+        if (Object.keys(updates).length > 0) {
+          await update(ref(database), updates);
+        }
+      }
+      
+      toast.success("Task deleted and user progress successfully reset!");
+    } catch (e) {
+      console.error(e);
+      toast.error("Error deleting task progress");
+    }
   };
 
   return (
