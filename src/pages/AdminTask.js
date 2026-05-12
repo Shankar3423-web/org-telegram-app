@@ -1,239 +1,332 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { ref, push, set, update, onValue, remove } from 'firebase/database';
+import React, { useEffect, useState } from "react";
+import { ref, push, set, onValue, remove, update } from "firebase/database";
 import { database } from "../services/FirebaseConfig";
-import "../Styles/AdminTask.css"
+import { Plus, Pencil, Trash2, X, Save, Zap, LayoutDashboard, Newspaper, FileText, Target, Tag, Layers, Link as LinkIcon, Code } from "lucide-react";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import "../Styles/AdminTask.css";
 
+const CATEGORIES = ["normal", "daily", "weekly", "achievements"];
+const TYPES = ["news", "game", "watch", "social", "partnership", "misc", "challenge"];
+const WEEKLY_MODES = ["single", "tracked"];
 
-
-const AdminTask = () => {
-  const [taskForm, setTaskForm] = useState({
-    title: '',
-    description: '',
-    type: '',
-    points: '',
-    videoUrl: '',
-  });
+export default function AdminTask() {
   const [tasks, setTasks] = useState([]);
-  const [editingTaskId, setEditingTaskId] = useState(null);
-  const [message, setMessage] = useState({ text: '', color: '' });
+  const [editing, setEditing] = useState(null);
+
+  const [form, setForm] = useState({
+    title: "",
+    description: "",
+    category: "",
+    type: "",
+    target: 1,
+    xp: 0,
+    url: "",
+    watchCode: "",          // ✅ ADDED
+    resetPolicy: "never",
+    weeklyMode: "single"
+  });
 
   useEffect(() => {
-    const tasksRef = ref(database, 'tasks');
-    const unsubscribe = onValue(tasksRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        setTasks(Object.entries(data).map(([id, taskItem]) => ({ id, ...taskItem })));
-      } else {
-        setTasks([]);
-      }
+    const unsub = onValue(ref(database, "tasks"), snap => {
+      const data = snap.val() || {};
+      const list = Object.entries(data).flatMap(([cat, tasks]) =>
+        Object.entries(tasks || {}).map(([id, t]) => ({
+          id,
+          category: cat,
+          ...t
+        }))
+      );
+      setTasks(list);
     });
-
-    return () => {
-      unsubscribe();
-    };
+    return () => unsub();
   }, []);
 
-  const showMessage = useCallback((msg, color) => {
-    setMessage({ text: msg, color });
-    setTimeout(() => {
-      setMessage({ text: '', color: '' });
-    }, 3000);
-  }, []);
+  const handleChange = e => {
+    const { name, value, type, checked } = e.target;
+    setForm(p => ({
+      ...p,
+      [name]: type === "checkbox" ? checked : value
+    }));
+  };
 
   const resetForm = () => {
-    setTaskForm({ title: '', description: '', type: '', points: '', videoUrl: '' });
-    setEditingTaskId(null);
+    setForm({
+      title: "",
+      description: "",
+      category: "",
+      type: "",
+      target: 1,
+      xp: 0,
+      url: "",
+      watchCode: "",        // ✅ RESET
+      resetPolicy: "never",
+      weeklyMode: "single"
+    });
+    setEditing(null);
   };
 
-  const handleChange = (e) => {
-    setTaskForm(prevState => ({ ...prevState, [e.target.name]: e.target.value }));
+  const handleEdit = task => {
+    setEditing(task);
+    setForm({
+      title: task.title,
+      description: task.description || "",
+      category: task.category,
+      type: task.type,
+      target: task.target,
+      xp: task.xp,
+      url: task.url || "",
+      watchCode: task.watchCode || "",   // ✅ LOAD
+      resetPolicy: task.resetPolicy,
+      weeklyMode: task.weeklyMode || "single"
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async e => {
     e.preventDefault();
-    const { title, description, type, points, videoUrl } = taskForm;
-    if (title && type && points) {
-      if (editingTaskId) {
-        updateTask(editingTaskId, title, description, type, parseInt(points, 10), videoUrl);
-      } else {
-        createTask(title, description, type, parseInt(points, 10), videoUrl);
-      }
-    }
-  };
 
-  const createTask = (title, description, type, points, videoUrl) => {
-    const tasksRef = ref(database, 'tasks');
-    const newTaskRef = push(tasksRef);
-    const taskData = {
-      title,
-      description,
-      type,
-      points,
-      videoUrl,
-      createdAt: new Date().toISOString(),
+    const payload = {
+      title: form.title,
+      description: form.description,
+      type: form.type,
+      target: Number(form.target),
+      xp: Number(form.xp),
+      url: form.url || "",
+      watchCode: form.type === "watch" ? form.watchCode : null, // ✅ STORE ONLY FOR WATCH
+      resetPolicy: form.resetPolicy,
+      weeklyMode: form.category === "weekly" ? form.weeklyMode : null,
+      updatedAt: Date.now()
     };
 
-    set(newTaskRef, taskData)
-      .then(() => {
-        showMessage(`Task "${title}" created successfully!`, 'green');
-        resetForm();
-      })
-      .catch((error) => {
-        showMessage(`Error creating task: ${error.message}`, 'red');
-      });
-  };
-
-  const updateTask = (taskId, title, description, type, points, videoUrl) => {
-    const taskRef = ref(database, 'tasks/' + taskId);
-
-    update(taskRef, {
-      title,
-      description,
-      type,
-      points,
-      videoUrl,
-      updatedAt: new Date().toISOString(),
-    })
-      .then(() => {
-        showMessage('Task updated successfully!', 'green');
-        resetForm();
-      })
-      .catch((error) => {
-        showMessage(`Error updating task: ${error.message}`, 'red');
-      });
-  };
-
-  const handleEdit = (taskId) => {
-    const task = tasks.find(task => task.id === taskId);
-    if (task) {
-      setTaskForm({
-        title: task.title,
-        description: task.description || '',
-        type: task.type,
-        points: (task.points || task.score || 0).toString(),
-        videoUrl: task.videoUrl || ''
-      });
-      setEditingTaskId(taskId);
-    }
-  };
-
-  const handleDelete = (taskId) => {
-    if (window.confirm('Are you sure you want to delete this task?')) {
-      const taskRef = ref(database, 'tasks/' + taskId);
-      remove(taskRef)
-        .then(() => {
-          showMessage('Task deleted successfully!', 'green');
-        })
-        .catch((error) => {
-          showMessage(`Error deleting task: ${error.message}`, 'red');
+    try {
+      if (editing) {
+        await update(ref(database, `tasks/${editing.category}/${editing.id}`), payload);
+        toast.success("Task updated");
+      } else {
+        await set(push(ref(database, `tasks/${form.category}`)), {
+          ...payload,
+          createdAt: Date.now()
         });
+        toast.success("Task created");
+      }
+      resetForm();
+    } catch (e) {
+      toast.error("Error saving task");
     }
+  };
+
+  const handleDelete = async task => {
+    if (!window.confirm("Delete task?")) return;
+    await remove(ref(database, `tasks/${task.category}/${task.id}`));
+    toast.success("Task deleted");
   };
 
   return (
-    <div className="task-container">
-      <h1>Task Manager</h1>
-      <form id="taskForm" onSubmit={handleSubmit}>
-        <input
-          type="text"
-          name="title"
-          placeholder="Enter task title"
-          value={taskForm.title}
-          onChange={handleChange}
-          required
-        />
-        <input
-          type="text"
-          name="description"
-          placeholder="Enter task description (optional)"
-          value={taskForm.description}
-          onChange={handleChange}
-        />
-        <select
-          name="type"
-          value={taskForm.type}
-          onChange={handleChange}
-          required
-        >
-          <option value="">Select task type</option>
-          <option value="watch">Watch</option>
-          <option value="social">Social</option>
-          <option value="partnership">Partnership</option>
-          <option value="misc">Misc</option>
-        </select>
-        <input
-          type="number"
-          name="points"
-          placeholder="Enter task points"
-          value={taskForm.points}
-          onChange={handleChange}
-          required
-        />
-        <input
-          type="text"
-          name="videoUrl"
-          placeholder="Enter video URL (optional, for watch tasks)"
-          value={taskForm.videoUrl}
-          onChange={handleChange}
-        />
-        <button type="submit">
-          {editingTaskId ? 'Update Task' : 'Add Task'}
-        </button>
-      </form>
-      {message.text && (
-        <div id="message" style={{ color: message.color }}>
-          {message.text}
-        </div>
-      )}
-      <div id="taskList">
-        <h2>Existing Tasks</h2>
-        <table id="tasksTable">
-          <thead>
-            <tr>
-              <th>TaskId</th>
-              <th>Title</th>
-              <th>Type</th>
-              <th>Points</th>
-              <th>Description</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tasks.map((taskItem, index) => (
-              <tr key={taskItem.id}>
-                <td>{index + 1}</td>
-                <td>{taskItem.title}</td>
-                <td>{taskItem.type}</td>
-                <td>{taskItem.points || taskItem.score}</td>
-                <td>{taskItem.description}</td>
-                <td>
-                  <button
-                    className="edit-btn"
-                    onClick={() => handleEdit(taskItem.id)}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    className="delete-btn"
-                    onClick={() => handleDelete(taskItem.id)}
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {tasks.length === 0 && (
-              <tr>
-                <td colSpan="6" style={{ textAlign: 'center' }}>
-                  No tasks available
-                </td>
-              </tr>
+    <div className="task-admin-page">
+      <ToastContainer position="bottom-right" />
+
+      {/* ---------- ADD / EDIT FORM ---------- */}
+      <div className="form-card">
+        <h2 className="form-section-title">{editing ? "Edit Task" : "Add Task"}</h2>
+
+        <form onSubmit={handleSubmit} className="form-grid">
+
+
+          <div className="input-group">
+            <label><FileText size={14} className="inline mr-1" /> Task Title</label>
+            <input
+              name="title"
+              placeholder="Enter task title"
+              value={form.title}
+              onChange={handleChange}
+              required
+            />
+          </div>
+
+
+          <div className="input-group">
+            <label><Layers size={14} className="inline mr-1" /> Description</label>
+            <input
+              name="description"
+              placeholder="Short task description"
+              value={form.description}
+              onChange={handleChange}
+            />
+          </div>
+
+
+          <div className="input-group">
+            <label><Tag size={14} className="inline mr-1" /> Category</label>
+            <select
+              name="category"
+              value={form.category}
+              onChange={handleChange}
+              required
+              disabled={!!editing}
+            >
+              <option value="">Select Category</option>
+              {CATEGORIES.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+
+
+          <div className="input-group">
+            <label><LayoutDashboard size={14} className="inline mr-1" /> Task Type</label>
+            <select
+              name="type"
+              value={form.type}
+              onChange={handleChange}
+              required
+            >
+              <option value="">Select Type</option>
+              {TYPES.map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+
+
+          {/* ✅ WATCH-SPECIFIC FIELDS */}
+          {form.type === "watch" && (
+            <>
+              <div className="input-group">
+                <label><LinkIcon size={14} className="inline mr-1" /> Video URL</label>
+                <input
+                  name="url"
+                  placeholder="https://..."
+                  value={form.url}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+
+              <div className="input-group">
+                <label><Code size={14} className="inline mr-1" /> Verification Code</label>
+                <input
+                  name="watchCode"
+                  placeholder="Enter verification code"
+                  value={form.watchCode}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+
+            </>
+          )}
+
+          {form.category === "weekly" && (
+            <div className="input-group">
+              <label><Layers size={14} className="inline mr-1" /> Weekly Mode</label>
+              <select
+                name="weeklyMode"
+                value={form.weeklyMode}
+                onChange={handleChange}
+              >
+                <option value="single">Single (Once per week)</option>
+                <option value="tracked">Tracked (Progress based)</option>
+              </select>
+            </div>
+          )}
+
+
+
+
+          <div className="input-group">
+            <label><Target size={14} className="inline mr-1" /> Target</label>
+            <input
+              type="number"
+              name="target"
+              value={form.target}
+              onChange={handleChange}
+            />
+          </div>
+
+          <div className="input-group">
+            <label><Zap size={14} className="inline mr-1" /> XP Reward</label>
+            <input
+              type="number"
+              name="xp"
+              value={form.xp}
+              onChange={handleChange}
+            />
+          </div>
+
+
+
+          <div className="form-footer-actions">
+            <button type="submit" className="submit-premium-btn">
+              {editing ? <Save size={18} /> : <Plus size={18} />}
+              <span>{editing ? "Update Task" : "Save Task"}</span>
+            </button>
+            {editing && (
+              <button type="button" className="cancel-premium-btn" onClick={resetForm}>
+                <X size={18} /> Cancel
+              </button>
             )}
-          </tbody>
-        </table>
+          </div>
+
+        </form>
+      </div>
+
+      {/* ---------- TASK TABLE ---------- */}
+      <div className="table-section">
+        <div className="table-section-header">
+          <h2 className="form-section-title"><Layers size={20} /> Existing Tasks</h2>
+          <p className="section-subtitle">Manage and monitor all your active tasks here</p>
+        </div>
+        <div className="table-container">
+          <table className="task-table">
+
+            <thead>
+              <tr>
+                <th width="50">#</th>
+                <th>TITLE</th>
+                <th>CATEGORY</th>
+                <th>TYPE</th>
+                <th>XP</th>
+                <th width="100">ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tasks.map((t, i) => (
+                <tr key={t.id}>
+                  <td>{i + 1}</td>
+                  <td className="font-bold">{t.title}</td>
+                  <td>
+                    <span className={`badge-premium badge-cat-${t.category}`}>
+                      {t.category}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={`badge-premium badge-type-${t.type}`}>
+                      {t.type}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="xp-value">
+                      {t.xp} <Zap size={14} fill="#f59e0b" />
+                    </div>
+                  </td>
+                  <td>
+                    <div className="action-cell">
+                      <button className="btn-icon edit" onClick={() => handleEdit(t)} title="Edit">
+                        <Pencil size={16} />
+                      </button>
+                      <button className="btn-icon delete" onClick={() => handleDelete(t)} title="Delete">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
-};
+}
 
-export default AdminTask;

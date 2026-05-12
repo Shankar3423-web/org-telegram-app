@@ -9,25 +9,24 @@ import { useTelegram } from "../../reactContext/TelegramContext";
 import { useReferral } from "../../reactContext/ReferralContext";
 import { useNavigate } from "react-router-dom";
 import { database } from "../../services/FirebaseConfig";
-import { ref, onValue, runTransaction, update } from "firebase/database";
+import { ref, onValue, runTransaction, update, get, set } from "firebase/database";
 import { addHistoryLog } from "../../services/addHistory.js";
 
 const BOT_TOKEN = process.env.REACT_APP_BOT_TOKEN;
 export default function TasksPage() {
-
   const { user, scores } = useTelegram();
-  const { invitedFriends } = useReferral();
-  const [tasks, setTasks] = useState([]);
-  const [filterType, setFilterType] = useState("all");
   const navigate = useNavigate();
 
-
+  const [tasks, setTasks] = useState({});
+  const [userTasks, setUserTasks] = useState({});
+  const [filterType, setFilterType] = useState("all");
   const [buttonText, setButtonText] = useState({});
+  
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [videoTimer, setVideoTimer] = useState(0);
-
   const [activeTaskId, setActiveTaskId] = useState(null);
-  // const [click, setClick] = useState({}); // Removed unused state
+
+  const userId = user?.id;
 
   useEffect(() => {
     let interval;
@@ -39,147 +38,26 @@ export default function TasksPage() {
     return () => clearInterval(interval);
   }, [selectedVideo, videoTimer]);
 
-  const [userTasks, setUserTasks] = useState({});
-  const [gameCompleted, setGameCompleted] = useState(false);
-  const [newsCount, setnewsCount] = useState(0);
-  const [localScores, setLocalScores] = useState(null);
-  const [weeklyProgressData, setWeeklyProgressData] = useState(null);
-
-
-  const userId = user.id;
-
-  const isToday = (timestamp) => {
-    if (!timestamp) return false;
-    const date = new Date(timestamp);
-    const today = new Date();
-    return date.getDate() === today.getDate() &&
-      date.getMonth() === today.getMonth() &&
-      date.getFullYear() === today.getFullYear();
-  };
-
-  const isSameWeek = (timestamp) => {
-    if (!timestamp) return false;
-    const date = new Date(timestamp);
-    const today = new Date();
-    date.setHours(0, 0, 0, 0);
-    today.setHours(0, 0, 0, 0);
-    // Same week check (reset on Monday)
-    const day = today.getDay();
-    const diffToMonday = day === 0 ? 6 : day - 1; // Days since last Monday
-    const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - diffToMonday);
-    return date >= startOfWeek;
-  };
-
-  const isTaskDone = (task) => {
-    const { id, type, category } = task;
-
-    // CRITICAL FIX: For daily tasks, ONLY check the daily folder. 
-    // Ignore root `userTasks[id]` because old legacy data might exist there that never gets wiped.
-    let status;
-    if (category === 'daily') {
-      status = userTasks.tasks?.daily?.[id];
-    } else {
-      // For standard tasks, check root. Fallback to daily just in case.
-      status = userTasks[id] || (userTasks.tasks?.daily?.[id]);
-    }
-
-    if (status === undefined || status === null || status === false) return false;
-
-    // Video Task Logic: Check for Admin updates (Video URL Change)
-    if (type === 'watch') {
-      const currentVideoUrl = task.videoUrl || task.url;
-      // If we have a claimed status record
-      if (status && typeof status === 'object' && status.videoUrl) {
-        // If the video URL has changed since we claimed it, it's NOT done (User can watch again)
-        if (status.videoUrl !== currentVideoUrl) return false;
-      }
-      // Legacy handling or standard boolean status
-      return !!status;
-    }
-
-    const RESET_TYPES = ['game', 'news', 'partnership', 'referral'];
-    if (RESET_TYPES.includes(type)) {
-      // Legacy 'true' means old data -> Expired/Reset
-      if (status === true) return false;
-
-      if (typeof status === 'object' && status.lastClaimed) {
-        // Double check date, though App.js should wipe it.
-        return isToday(status.lastClaimed);
-      }
-      return false;
-    }
-
-    // Default: Permanent completion for other tasks
-    return true;
-  };
-
   useEffect(() => {
+    if (!userId) return;
     const tasksRef = ref(database, "tasks");
-    const gameTaskRef = ref(database, `connections/${user.id}/tasks/daily/game`);
-    const newsRef = ref(database, `connections/${user.id}/tasks/daily/news`);
-    const userTasksRef = ref(database, `connections/${user.id}`);
-    const userScoreRef = ref(database, `users/${user.id}/Score`);
-    const weeklyProgressRef = ref(database, `users/${user.id}/weekly_progress`);
+    const userTasksRef = ref(database, `connections/${userId}/tasks`);
 
-    const unsubscribeTasks = onValue(tasksRef, (snapshot) => {
-      // Logic from lines 52-62
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        const tasksArray = Object.entries(data).flatMap(([category, categoryTasks]) => {
-          if (!categoryTasks || typeof categoryTasks !== 'object') return [];
-          return Object.entries(categoryTasks).map(([key, task]) => ({
-            ...task,
-            id: task.id || key, // Ensure ID exists
-            category: task.category || category // Fallback to folder name if category property is missing
-          }));
-        });
-        setTasks(tasksArray);
-      } else {
-        setTasks([]);
-      }
+    const unsubTasks = onValue(tasksRef, snap => {
+      setTasks(snap.val() || {});
     });
 
-    const unsubscribeGame = onValue(gameTaskRef, (snapshot) => {
-      setGameCompleted(snapshot.val() === true);
-    });
-
-    const unsubscribeNews = onValue(newsRef, (snapshot) => {
-      setnewsCount(snapshot.exists() ? Object.keys(snapshot.val() || {}).length : 0);
-    });
-
-    const unsubscribeUserTasks = onValue(userTasksRef, (snapshot) => {
-      setUserTasks(snapshot.exists() ? snapshot.val() : {});
-    });
-
-    const unsubscribeScores = onValue(userScoreRef, (snapshot) => {
-      if (snapshot.exists()) {
-        setLocalScores(snapshot.val());
-      }
-    });
-
-    const unsubscribeWeekly = onValue(weeklyProgressRef, (snapshot) => {
-      if (snapshot.exists()) {
-        // Map this to a local state if needed, or we just rely on it updating 'scores' if we put it there?
-        // Actually, we calculate 'weeklyPoints' later. Ideally we just store this data.
-        // Let's assume we might need a state for it.
-        setWeeklyProgressData(snapshot.val());
-      }
+    const unsubUserTasks = onValue(userTasksRef, snap => {
+      setUserTasks(snap.val() || {});
     });
 
     return () => {
-      unsubscribeTasks();
-      unsubscribeGame();
-      unsubscribeNews();
-      unsubscribeUserTasks();
-      unsubscribeScores();
-      unsubscribeWeekly();
+      unsubTasks();
+      unsubUserTasks();
     };
-  }, [user.id]);
+  }, [userId]);
 
-  // Use localScores for real-time updates, fallback to context
-  const scoreData = localScores || scores;
-  const displayTaskScore = isToday(scoreData?.task_updated_at) ? (scoreData?.task_score || 0) : 0;
+  const displayTaskScore = scores?.task_score || 0;
 
   const IconMap = useMemo(() => ({
     Zap: <Zap className="h-5 w-5 text-indigo-300" />,
@@ -193,78 +71,86 @@ export default function TasksPage() {
     Twitter: <Twitter className="h-5 w-5 text-sky-400" />,
   }), []);
 
-  // Use `points` as primary reward â€” fallback to `score`, then 100
-  // Use `points` as primary reward â€” fallback to `score`, then 100
-  // Updated Weekly Logic: Use 'current_week_days' from our new tracker
-  const weeklyDaysCompleted = weeklyProgressData?.current_week_days || 0;
+  const processedTasks = useMemo(() => {
+    return Object.entries(tasks).flatMap(([category, catTasks]) =>
+      Object.entries(catTasks || {}).map(([id, task]) => {
+        const uTask = userTasks[category]?.[id] || {};
+        
+        const iconKey = typeof task.icon === 'string'
+          ? Object.keys(IconMap).find(k => k.toLowerCase() === task.icon.toLowerCase())
+          : null;
+
+        return {
+          id,
+          category,
+          ...task,
+          points: task.xp || task.score || task.points || 0,
+          completed: uTask.progress || 0,
+          total: task.target || task.total || 1,
+          claimed: uTask.claimed || false,
+          started: uTask.started || false,
+          icon: iconKey ? IconMap[iconKey] : (IconMap['Zap'] || <Zap className="h-5 w-5 text-indigo-300" />),
+          iconBg: task.iconBg || "bg-indigo-500/30",
+        };
+      })
+    );
+  }, [tasks, userTasks, IconMap]);
+
+  const dailyTasks = processedTasks.filter(t => t.category === "daily");
+  const weeklyTasks = processedTasks.filter(t => t.category === "weekly");
+  const achievements = processedTasks.filter(t => t.category === "achievements");
 
 
-  // Wrap mapTask in useCallback to be stable for useMemo
-  const mapTask = useCallback((task) => {
-    // Check points, then score, then default to 100
-    // Ensure it's treated as a number
-    const rawReward = task.points !== undefined ? task.points : (task.score !== undefined ? task.score : 100);
-    const reward = Number(rawReward) || 0;
+  const gameCompleted = false;
+  const newsCount = 0;
 
-    // Normalize icon key to handle case sensitivity (e.g., "users" -> "Users")
-    const iconKey = typeof task.icon === 'string'
-      ? Object.keys(IconMap).find(k => k.toLowerCase() === task.icon.toLowerCase())
-      : null;
+  const isTaskDone = (task) => {
+    return task.claimed === true;
+  };
 
-    let completedVal = task.completed || 0;
-    // Map specific dynamic progress
-    if (task.title && task.title.toLowerCase().includes('news')) {
-      completedVal = newsCount;
-    } else if (task.title && task.title.toLowerCase().includes('daily tasks')) {
-      // 7-day streak task
-      completedVal = weeklyDaysCompleted;
-    } else if (task.title && (task.title.toLowerCase().includes('invite') || task.title.toLowerCase().includes('refer'))) {
-      // FORCE 'daily' category for generic "Refer a Friend" tasks to ensure strict daily reset logic applies
-      task.category = 'daily';
+  const handleDailyCompletionForWeekly = async () => {
+    const allDailyTasks = tasks.daily || {};
+    const userDailyTasks = userTasks.daily || {};
 
-      if (task.category === 'daily') {
-        completedVal = invitedFriends ? invitedFriends.filter(f => isToday(f.referralDate)).length : 0;
-      } else {
-        completedVal = invitedFriends ? invitedFriends.length : 0;
+    if (Object.keys(allDailyTasks).length === 0) return;
+
+    const allCompleted = Object.keys(allDailyTasks).every(
+      taskId => userDailyTasks[taskId]?.completed === true
+    );
+
+    if (!allCompleted) return;
+
+    const today = new Date().toDateString();
+    const lastDateRef = ref(database, `connections/${userId}/meta/lastDailyCompleteDate`);
+    const lastSnap = await get(lastDateRef);
+
+    if (lastSnap.val() === today) return;
+
+    const wTasks = tasks.weekly || {};
+    for (const [weeklyTaskId, weeklyTask] of Object.entries(wTasks)) {
+      if (weeklyTask.weeklyMode === "tracked") {
+        const userWeeklyRef = ref(database, `connections/${userId}/tasks/weekly/${weeklyTaskId}`);
+        const userWeeklySnap = await get(userWeeklyRef);
+
+        const current = userWeeklySnap.val()?.progress || 0;
+        const next = current + 1;
+
+        await update(userWeeklyRef, {
+          progress: next,
+          completed: next >= weeklyTask.target,
+          lastUpdated: Date.now()
+        });
       }
-    } else if (task.title && task.title.toLowerCase().includes('points')) {
-      // 500 points task - Ensure we use the weeklyPoints logic (which draws from scoreData.weekly_points)
-      // scoreData is 'localScores' which we update in the transaction now.
-      completedVal = isSameWeek(scoreData?.weekly_updated_at) ? (scoreData?.weekly_points || 0) : 0;
     }
+    await set(lastDateRef, today);
+  };
 
-    return {
-      ...task,
-      category: (task.title && (task.title.toLowerCase().includes('invite') || task.title.toLowerCase().includes('refer'))) ? 'daily' : (task.category || 'standard'),
-      type: (task.title && task.title.toLowerCase().includes('news')) ? 'news' :
-        (task.title && (task.title.toLowerCase().includes('invite') || task.title.toLowerCase().includes('refer'))) ? 'referral' :
-          task.type,
-      points: reward, // Normalize to `points` for consistency
-      completed: completedVal,
-      icon: iconKey ? IconMap[iconKey] : (IconMap['Zap'] || <Zap className="h-5 w-5 text-indigo-300" />),
-      iconBg: task.iconBg || "bg-indigo-500/30",
-    };
-  }, [newsCount, weeklyDaysCompleted, invitedFriends, scoreData, IconMap]);
-
-  const processedTasks = useMemo(() => tasks.map(mapTask), [tasks, mapTask]);
-
-  const dailyTasks = processedTasks.filter(
-    (task) => (task.category === 'daily' || task.category === 'standard' || (!task.category && !['weekly', 'achievements'].includes(task.type)))
-      && task.type !== 'social'
-      && !(task.type === 'watch' && isTaskDone(task))
-  );
-  const weeklyTasks = processedTasks.filter(task => task.category === 'weekly');
-  const achievements = processedTasks.filter(task => task.category === 'achievements');
-
-  const fetchChatMember = async (chatId, userId) => {
+  const fetchChatMember = async (chatId) => {
     try {
-      const response = await fetch(
-        `https://api.telegram.org/bot${BOT_TOKEN}/getChatMember?chat_id=${chatId}&user_id=${userId}`
-      );
+      const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getChatMember?chat_id=${chatId}&user_id=${userId}`);
       const data = await response.json();
       return data.ok ? data.result : null;
     } catch (err) {
-      console.error("API Request Failed:", err);
       return null;
     }
   };
@@ -272,22 +158,15 @@ export default function TasksPage() {
   const handleChatId = async (url) => {
     if (!url) return { chatId: null };
     try {
-      // Extract username from t.me/username or telegram.me/username
-      // Handle both simple usernames and joinchat links (though joinchat is harder, usually public channels use username)
       const match = url.match(/(?:t\.me|telegram\.me)\/([^/?]+)/);
-      if (match && match[1]) {
-        // If it's a join link (starts with +), we technically can't check via API easily without user ID being known to bot in that chat
-        // But for public channels @username works.
-        return { chatId: `@${match[1]}` };
-      }
+      if (match && match[1]) return { chatId: `@${match[1]}` };
       return { chatId: null };
     } catch (err) {
-      console.error("Error parsing chat ID:", err);
       return { chatId: null };
     }
   };
 
-  const startMembershipCheck = async (taskId, chatId) => {
+  const startMembershipCheck = async (taskId, chatId, category) => {
     let checkCount = 0;
     const interval = setInterval(async () => {
       checkCount += 1;
@@ -297,37 +176,19 @@ export default function TasksPage() {
         return;
       }
 
-      const chatMember = await fetchChatMember(chatId, user.id);
-      if (!chatMember || !chatMember.status) {
-        // converting @username to id might fail if bot isn't admin or channel is private
-        // But for public channels it should work if bot is just added
-        // If failed, maybe keep trying or just fail? 
-        // Failing fast is better than hanging.
-        // Actually, if bot hasn't seen the chat, it returns 400.
-        // so chatMember will be null.
-        // We act as if failed.
-        // setButtonText(prev => ({ ...prev, [taskId]: "Failed" }));
-        // clearInterval(interval);
-        // return;
-        // Wait, maybe loop a few times incase of network glitch?
-      }
-
+      const chatMember = await fetchChatMember(chatId);
       if (chatMember && chatMember.status) {
-        const { status } = chatMember;
-        const isMember = ["member", "administrator", "creator"].includes(status);
-
+        const isMember = ["member", "administrator", "creator"].includes(chatMember.status);
         if (isMember) {
-          const userTasksRef = ref(database, `connections/${user.id}`);
-          await update(userTasksRef, { [taskId]: false });
+          await update(ref(database, `connections/${userId}/tasks/${category}/${taskId}`), { 
+            completed: true, 
+            progress: 1 
+          });
           setButtonText(prev => ({ ...prev, [taskId]: "Claim" }));
           clearInterval(interval);
           return;
         }
-      } else {
-        // If chatMember is null (API error), we count it as a fail or just wait?
       }
-
-      // Update text to "Checking..." is already set.
 
       if (checkCount >= 100) {
         setButtonText(prev => ({ ...prev, [taskId]: "Failed" }));
@@ -336,265 +197,88 @@ export default function TasksPage() {
     }, 3000);
   };
 
-  /* 
-   * CRITICALLY OPTIMIZED handleTitle
-   * Uses Transactions for Atomic Score Updates
-   * Handles Weekly Progress Tracking
-   * Manages Video URL Versioning
-   */
   const handleTitle = async (task, taskId) => {
-    const clickBtn = document.getElementById(`clickBtn${taskId}`);
-    const currentText = buttonText[taskId] || "Start Task";
+    if (!userId) return;
 
-    // UI Feedback Helper
-    const setBtnLoading = () => setButtonText(prev => ({ ...prev, [taskId]: "Processing..." }));
-    const setBtnFailed = () => {
-      setButtonText(prev => ({ ...prev, [taskId]: "Failed" }));
-      setTimeout(() => setButtonText(prev => ({ ...prev, [taskId]: "Try Again" })), 2000);
-    };
+    const uTask = userTasks[task.category]?.[taskId] || {};
+    const progress = uTask.progress || 0;
+    const isCompleted = uTask.completed || progress >= (task.target || task.total || 1);
+    
+    if (!isCompleted) {
+      if (task.type === "watch") {
+        await update(ref(database, `connections/${userId}/tasks/${task.category}/${taskId}`), {
+          started: true,
+          lastStartedAt: Date.now()
+        });
+        
+        if (task.videoUrl) {
+           setSelectedVideo(task.videoUrl);
+           setVideoTimer(30);
+           setActiveTaskId(taskId);
+        } else if (task.url) {
+           window.open(task.url, "_blank");
+        }
+        return;
+      } else if (task.type === "social") {
+         setButtonText(prev => ({ ...prev, [taskId]: "Checking..." }));
+         window.open(task.url, "_blank");
+         const { chatId } = await handleChatId(task.url);
+         startMembershipCheck(taskId, chatId, task.category);
+         return;
+      } else if (task.type === "news") {
+         navigate("/news");
+         return;
+      } else if (task.type === "game") {
+         navigate("/game");
+         return;
+      } else if (task.type === "partnership" || task.type === "referral") {
+         navigate("/network");
+         return;
+      } else if (task.url) {
+         window.open(task.url, "_blank");
+         return;
+      }
+    }
 
-    // --- SHARED CLAIM LOGIC START ---
-    const executeClaim = async (taskObj, extraData = {}) => {
-      setBtnLoading();
+    if (isCompleted && !task.claimed) {
+      setButtonText(prev => ({ ...prev, [taskId]: "Processing..." }));
       try {
-        const taskPoints = Number(taskObj.points) || 0;
+        const xp = Number(task.points || 0);
+        const userScoreRef = ref(database, `users/${userId}/Score`);
+        const snap = await get(userScoreRef);
+        const s = snap.val() || {};
 
-        // 1. Transactional Score Update (Prevents Race Conditions)
-        const userScoreRef = ref(database, `users/${user.id}/Score`);
-        const scoreTransactionResult = await runTransaction(userScoreRef, (currentScoreData) => {
-          if (!currentScoreData) {
-            return {
-              task_score: taskPoints,
-              total_score: taskPoints,
-              weekly_points: taskPoints,
-              weekly_updated_at: Date.now(),
-              task_updated_at: Date.now(),
-              farming_score: 0, game_score: 0, network_score: 0, news_score: 0
-            };
-          }
-
-          // Calculate new totals safely
-          const new_task_score = (Number(currentScoreData.task_score) || 0) + taskPoints;
-          const new_total_score = (
-            (Number(currentScoreData.farming_score) || 0) +
-            (Number(currentScoreData.game_score) || 0) +
-            (Number(currentScoreData.network_score) || 0) +
-            (Number(currentScoreData.news_score) || 0) +
-            new_task_score
-          );
-
-          // Weekly Points Logic (with Reset)
-          let new_weekly_points = (Number(currentScoreData.weekly_points) || 0);
-          if (isSameWeek(currentScoreData.weekly_updated_at)) {
-            new_weekly_points += taskPoints;
-          } else {
-            new_weekly_points = taskPoints; // Reset for new week
-          }
-
-          return {
-            ...currentScoreData,
-            task_score: new_task_score,
-            total_score: new_total_score,
-            weekly_points: new_weekly_points,
-            weekly_updated_at: Date.now(), // Always update timestamp to keep it fresh
-            task_updated_at: Date.now()
-          };
+        await update(userScoreRef, {
+          task_score: (s.task_score || 0) + xp,
+          total_score: (s.total_score || 0) + xp
         });
 
-        if (scoreTransactionResult.committed) {
-          // 2. Update Task Status (Atomic per user action)
-          // Store specific data like videoUrl to handle Admin updates
-          const claimData = {
-            lastClaimed: Date.now(),
-            ...extraData
-          };
+        const userTaskRef = ref(database, `connections/${userId}/tasks/${task.category}/${taskId}`);
 
-          // Store in daily folder IF it's a daily task, ensuring auto-reset works
-          const claimPath = (taskObj.category === 'daily')
-            ? `connections/${user.id}/tasks/daily/${taskId}`
-            : `connections/${user.id}/${taskId}`;
-
-          await update(ref(database, claimPath), claimData);
-
-          // Reset game task completed status after claiming to ensure daily cycle works properly
-          if (taskObj.type === 'game') {
-            await update(ref(database, `connections/${user.id}/tasks/daily`), { game: false });
-          }
-
-          // 3. Weekly Progress Logic
-          // Check if this was a Daily Task and if we finished the day
-          if (taskObj.category === 'daily' || taskObj.type === 'news' || taskObj.type === 'game' || taskObj.type === 'watch') {
-            // Optimization: We verify client-side first to avoid spamming transactions
-            // Filter *all* daily tasks from our local 'tasks' state
-            const currentDailyTasks = tasks.filter(t =>
-              (t.category === 'daily') ||
-              (t.type === 'game') ||
-              (t.type === 'news')
-            );
-
-            // Check if ALL are done (including the one we just claimed)
-            // We pass the new status for *this* task explicitly to the checker helper logic or just rely on 'userTasks' locally updated?
-            // React state 'userTasks' won't be updated yet. We need to be careful.
-            const allDone = currentDailyTasks.every(t => {
-              if (t.id === taskId) return true; // Optimistically assume this one is done
-              return isTaskDone(t);
-            });
-
-            if (allDone) {
-              // Check and increment weekly progress transactionally
-              const weeklyRef = ref(database, `users/${user.id}/weekly_progress`);
-              await runTransaction(weeklyRef, (currentWeekly) => {
-                const now = new Date();
-                // Simple date string for unique day check
-                const todayStr = now.toISOString().split('T')[0];
-
-                if (!currentWeekly) {
-                  return { current_week_days: 1, last_completed_date: todayStr };
-                }
-
-                // If already incremented for today, ignore
-                if (currentWeekly.last_completed_date === todayStr) {
-                  return currentWeekly; // No change
-                }
-
-                // Check for Week Reset
-                // If the last completion was NOT in the same week, reset count to 1
-                // Note: We use 'last_completed_date' as the reference point
-                let newDays;
-                if (isSameWeek(currentWeekly.last_completed_date)) {
-                  newDays = (currentWeekly.current_week_days || 0) + 1;
-                } else {
-                  newDays = 1; // New Week -> First day completed
-                }
-
-                return {
-                  ...currentWeekly,
-                  current_week_days: Math.min(newDays, 7),
-                  last_completed_date: todayStr
-                };
-              });
-            }
-          }
-
-          // History Log
-          addHistoryLog(userId, {
-            action: `Task Reward: ${taskObj.title}`,
-            points: taskPoints,
-            type: taskObj.type || 'task',
+        if (task.category === "achievements") {
+          await set(userTaskRef, {
+            progress: 0,
+            completed: false,
+            claimed: false,
+            lastUpdated: Date.now()
           });
-
-          if (clickBtn) clickBtn.style.display = "none";
         } else {
-          throw new Error("Transaction failed");
+          await update(userTaskRef, { claimed: true, claimedAt: Date.now() });
         }
-      } catch (error) {
-        console.error("Claim Error:", error);
-        setBtnFailed();
+
+        if (task.category === "daily") {
+          await handleDailyCompletionForWeekly();
+        }
+
+        addHistoryLog(userId, { action: `Task Reward: ${task.title}`, points: xp, type: task.type || 'task' });
+        
+        const clickBtn = document.getElementById(`clickBtn${taskId}`);
+        if (clickBtn) clickBtn.style.display = "none";
+      } catch (err) {
+        console.error(err);
+        setButtonText(prev => ({ ...prev, [taskId]: "Failed" }));
+        setTimeout(() => setButtonText(prev => ({ ...prev, [taskId]: "Claim" })), 2000);
       }
-    };
-    // --- SHARED CLAIM LOGIC END ---
-
-    switch (task.type?.toLowerCase()) {
-      case "watch":
-        // For Watch tasks, we check if we need to show the video
-        // Status check: If not done OR text is "Start Task"/"Join Again"
-        // Also if we have a mismatch videoUrl, isTaskDone returns false, so we enter here.
-        if (["Start Task", "Join Again"].includes(currentText) && !isTaskDone(task)) {
-          // Open Video Modal
-          const videoUrl = task.videoUrl || task.url;
-          if (videoUrl) {
-            setSelectedVideo(videoUrl);
-            setVideoTimer(30);
-            setActiveTaskId(taskId);
-          }
-        } else if (!isTaskDone(task) || currentText === "Claim") {
-          // Pass videoUrl to be stored in the claim record
-          executeClaim(task, { videoUrl: task.videoUrl || task.url });
-        }
-        break;
-
-      case "social":
-        // setClick(prev => ({ ...prev, [task.title]: true }));
-        if (["Start Task", "Join Again", "Failed"].includes(currentText)) {
-          setButtonText(prev => ({ ...prev, [taskId]: "Checking..." }));
-          window.open(task.url, "_blank");
-          const { chatId } = await handleChatId(task.url);
-          startMembershipCheck(taskId, chatId);
-        } else if (currentText === "Claim" && !isTaskDone(task)) {
-          executeClaim(task);
-        }
-        break;
-
-      case "partnership":
-        navigate("/network");
-        break;
-
-      case "misc":
-        window.open(task.url, "_blank");
-        break;
-
-      case "game":
-        // Check if game is completed or explicitly ready to claim
-        if (gameCompleted || (userTasks[taskId] === false) || currentText === "Claim") {
-          executeClaim(task);
-        } else {
-          // OPTIMIZATION: Immediate navigation
-          setTimeout(() => navigate("/game"), 0);
-        }
-        break;
-
-      case "news":
-        // If task is not done, check if we can claim or need to navigate
-        if (!isTaskDone(task)) {
-          // Check if ready to claim (e.g. read 5 news)
-          // Hardcoded 5 matching the logic user requested/implied
-          if (newsCount >= 5) {
-            executeClaim(task);
-          } else {
-            // Not enough news read -> Navigate
-            setTimeout(() => navigate("/news"), 0);
-          }
-        } else {
-          // Already done, just navigate for review
-          setTimeout(() => navigate("/news"), 0);
-        }
-        break;
-
-      case "referral":
-        // Logic for Referral Claim
-        if (!isTaskDone(task)) {
-          if (task.completed >= task.total) {
-            executeClaim(task);
-          } else {
-            // Navigate to invite page if not enough referrals
-            setTimeout(() => navigate("/network"), 0);
-          }
-        }
-        break;
-
-      case "weekly":
-        if (!isTaskDone(task)) {
-          if (task.completed >= task.total) {
-            executeClaim(task);
-          } else {
-            // Visual feedback that it's not ready
-            const updatedButtonTexts = { ...buttonText };
-            updatedButtonTexts[taskId] = "In Progress";
-            setButtonText(updatedButtonTexts);
-            setTimeout(() => {
-              setButtonText(prev => {
-                const next = { ...prev };
-                delete next[taskId]; // Reset to default
-                return next;
-              });
-            }, 1000);
-          }
-        }
-        break;
-
-      default:
-        // No action for unknown types
-        break;
     }
   };
 

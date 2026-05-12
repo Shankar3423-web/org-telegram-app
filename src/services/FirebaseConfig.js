@@ -51,20 +51,22 @@
 
 import { initializeApp } from "firebase/app";
 import { getDatabase } from "firebase/database";
+import { getAnalytics } from "firebase/analytics";
+
 const firebaseConfig = {
-  apiKey: "AIzaSyD03YRikMYZnnncwJWyjDf2wVFer-vukqU",
-  authDomain: "telegram-e84b9.firebaseapp.com",
-  databaseURL:
-    "https://telegram-e84b9-default-rtdb.asia-southeast1.firebasedatabase.app", // ✅ FIXED: region + no spaces
-  projectId: "telegram-e84b9",
-  storageBucket: "telegram-e84b9.firebasestorage.app",
-  messagingSenderId: "18200002246",
-  appId: "1:18200002246:web:df225386da8cf6d53861c7",
-  measurementId: "G-90BTGM8R0N",
+  apiKey: "AIzaSyA524Ji4G9lAKGA-VFS1eywt0K4LYFp1LQ",
+  authDomain: "telegram-mini-app-fc21f.firebaseapp.com",
+  databaseURL: "https://telegram-mini-app-fc21f-default-rtdb.firebaseio.com",
+  projectId: "telegram-mini-app-fc21f",
+  storageBucket: "telegram-mini-app-fc21f.firebasestorage.app",
+  messagingSenderId: "599936674560",
+  appId: "1:599936674560:web:49fc3c03875e5a3e05e1e5",
+  measurementId: "G-GQ6REW71S6"
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
+const analytics = getAnalytics(app);
 
-export { app, database };
+export { app, database, analytics };

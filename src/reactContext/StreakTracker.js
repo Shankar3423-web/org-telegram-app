@@ -1,6 +1,227 @@
+// // src/components/StreakTracker.js
+// import React, { useEffect, useState, createContext, useContext } from 'react';
+// import {  ref, get, update, onValue } from 'firebase/database';
+// import {database} from "../services/FirebaseConfig.js"
+// import { useTelegram } from './TelegramContext';
+
+// // ----------------------------------------------------
+// // Create a Context for Streak Data
+// // This allows any component to easily access the streak count
+// // ----------------------------------------------------
+// const StreakContext = createContext(null);
+
+// export const useStreak = () => {
+//     return useContext(StreakContext);
+// };
+
+// // ----------------------------------------------------
+// // StreakTracker Component (Logic & Provider)
+// // ----------------------------------------------------
+// const StreakTracker = ({ children }) => {
+//     const [currentStreak, setCurrentStreak] = useState(0);
+//     const [longestStreak, setLongestStreak] = useState(0);
+//     const [loadingStreak, setLoadingStreak] = useState(true);
+
+//     const db = database;
+//     const {user} = useTelegram()
 
 
-import React, { useEffect, useState, createContext, useContext, useCallback } from 'react';
+//     // Helper function to get current UTC date string
+//     const getUTCDateString = (timestamp = Date.now()) => {
+//         const date = new Date(timestamp);
+//         // format to YYYY-MM-DD in UTC
+//         return date.toISOString().split('T')[0];
+//     };
+
+//     // This function runs the streak logic
+//     // It should be called when a "streak-qualifying" action occurs
+//     const updateStreak = async () => {
+//         if (!user.id) {
+//             console.warn("No user logged in for streak update.");
+//             setLoadingStreak(false);
+//             return;
+//         }
+
+//         const userId = user.id;
+//         const userRef = ref(db, `users/${userId}`);
+
+//         try {
+//             // 1. Fetch current user data
+//             const snapshot = await get(userRef);
+//             const userData = snapshot.val();
+
+//             if (!userData) {
+//                 console.error("User data not found for streak update.");
+//                 setLoadingStreak(false);
+//                 return;
+//             }
+
+//             const currentTimestamp = Date.now(); // The exact time of this action (UTC milliseconds)
+
+//             // Get existing streak data
+//             const dbLastPlayed = userData.lastPlayed || 0;
+//             const dbCurrentStreakCount = userData.streak?.currentStreakCount || 0;
+//             const dbLastStreakCheckDateUTC = userData.streak?.lastStreakCheckDateUTC || '';
+//             const dbLongestStreakCount = userData.streak?.longestStreakCount || 0;
+
+//             // 2. Determine current UTC date
+//             const currentDateUTCString = getUTCDateString(currentTimestamp);
+//             const lastPlayedDateUTCString = getUTCDateString(dbLastPlayed);
+
+//             let newCurrentStreakCount = dbCurrentStreakCount;
+//             let newLastStreakCheckDateUTC = dbLastStreakCheckDateUTC;
+//             let newLongestStreakCount = dbLongestStreakCount;
+//             let streakBroken = false;
+//             let didStreakChange = false; // Flag to track if streak count actually changed
+
+//             // Determine yesterday's UTC date string for comparison
+//             const yesterdayUTC = new Date(currentTimestamp);
+//             yesterdayUTC.setUTCDate(yesterdayUTC.getUTCDate() - 1); // Subtract 1 day in UTC
+//             const yesterdayUTCString = getUTCDateString(yesterdayUTC.getTime());
+
+
+//             // 3. Apply Streak Logic
+//             if (!dbLastStreakCheckDateUTC) {
+//                 // Scenario 1: First activity ever or streak data initialized
+//                 newCurrentStreakCount = 1;
+//                 newLastStreakCheckDateUTC = currentDateUTCString;
+//                 newLongestStreakCount = 1;
+//                 didStreakChange = true;
+//                 console.log("Streak started!");
+//             } else if (currentDateUTCString === dbLastStreakCheckDateUTC) {
+//                 // Scenario 2: Activity on the same UTC day
+//                 // Streak count doesn't change, just update lastPlayed if needed
+//                 console.log("Already active today. Streak unchanged.");
+//             } else if (dbLastStreakCheckDateUTC === yesterdayUTCString) {
+//                 // Scenario 3: Activity on the consecutive UTC day
+//                 newCurrentStreakCount = dbCurrentStreakCount + 1;
+//                 newLastStreakCheckDateUTC = currentDateUTCString;
+//                 newLongestStreakCount = Math.max(newCurrentStreakCount, dbLongestStreakCount);
+//                 didStreakChange = true;
+//                 console.log("Streak continued!");
+//             } else {
+//                 // Scenario 4: Activity after a skipped UTC day(s)
+//                 // Streak is broken
+//                 streakBroken = true;
+//                 newCurrentStreakCount = 1;
+//                 newLastStreakCheckDateUTC = currentDateUTCString;
+//                 didStreakChange = true; // Streak reset counts as a change
+//                 console.log("Streak broken. New streak started.");
+//             }
+
+//             // 4. Update Firebase Realtime Database
+//             const updates = {
+//                 lastPlayed: currentTimestamp,
+//                 lastUpdated: currentTimestamp,
+//                 'streak/currentStreakCount': newCurrentStreakCount,
+//                 'streak/lastStreakCheckDateUTC': newLastStreakCheckDateUTC,
+//                 'streak/longestStreakCount': newLongestStreakCount
+//             };
+
+//             await update(userRef, updates);
+
+//             // 5. Trigger Telegram Bot Message (CLIENT-SIDE DANGER!)
+//             // --- SECURITY WARNING: Exposing BOT_TOKEN directly in client-side code is DANGEROUS! ---
+//             // --- This is for demonstration purposes ONLY. Use a serverless function proxy! ---
+//             // const telegramChatId = userData.telegramChatId;
+//             // if (didStreakChange && telegramChatId) {
+//             //     let botMessage = '';
+//             //     if (streakBroken) {
+//             //         botMessage = `🚨 Your ${dbCurrentStreakCount}-day streak was broken. But you've started a new one at 1 day! 💪`;
+//             //     } else if (newCurrentStreakCount === 1) {
+//             //         botMessage = `🎉 Welcome! Your streak has started at 1 day! Keep it going!`;
+//             //     } else {
+//             //         botMessage = `🔥 Your streak is now ${newCurrentStreakCount} days! Keep up the great work!`;
+//             //         if (newCurrentStreakCount % 7 === 0) {
+//             //             botMessage += ` You've hit a ${newCurrentStreakCount}-day milestone!`;
+//             //         }
+//             //     }
+
+//             //     if (botMessage) {
+//             //         const BOT_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN'; // <<< REPLACE THIS!
+//             //         const apiUrl = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+
+//             //         fetch(apiUrl, {
+//             //             method: 'POST',
+//             //             headers: { 'Content-Type': 'application/json' },
+//             //             body: JSON.stringify({
+//             //                 chat_id: telegramChatId,
+//             //                 text: botMessage,
+//             //                 parse_mode: 'Markdown'
+//             //             })
+//             //         }).then(res => res.json())
+//             //           .then(data => console.log("Telegram API response:", data))
+//             //           .catch(error => console.error("Error sending Telegram message:", error));
+//             //     }
+//             // }
+
+//         } catch (error) {
+//             console.error("Error updating streak:", error);
+//         } finally {
+//             setLoadingStreak(false);
+//         }
+//     };
+
+//     useEffect(() => {
+//         // This effect listens for real-time updates to the streak data
+//         // and keeps the component state (and thus UI) in sync.
+//         if (user.id) {
+//             setLoadingStreak(false);
+//             return;
+//         }
+
+//         const userId = user.id;
+//         const streakRef = ref(db, `users/${userId}/streak`);
+
+//         const unsubscribe = onValue(streakRef, (snapshot) => {
+//             const streakData = snapshot.val();
+//             if (streakData) {
+//                 setCurrentStreak(streakData.currentStreakCount || 0);
+//                 setLongestStreak(streakData.longestStreakCount || 0);
+//             } else {
+//                 setCurrentStreak(0);
+//                 setLongestStreak(0);
+//             }
+//             setLoadingStreak(false);
+//         }, (error) => {
+//             console.error("Error fetching real-time streak data:", error);
+//             setLoadingStreak(false);
+//         });
+
+//         // Cleanup listener on unmount
+//         return () => unsubscribe();
+//     }, [user.id, db]);
+
+//     // This effect runs the streak update logic once on initial load (login)
+//     // You might also call `updateStreak()` from specific buttons/actions
+//     useEffect(() => {
+//         if (user.id) {
+//             // It's good to delay this slightly to ensure all initial user data is loaded
+//             // or trigger it after initializeUser completes.
+//             // For now, let's call it on mount.
+//             updateStreak();
+//         }
+//     }, [user.id]); // Re-run when currentUser object changes (e.g., login/logout)
+
+//     // The context value provides the streak data and the update function
+//     const streakContextValue = {
+//         currentStreak,
+//         longestStreak,
+//         loadingStreak,
+//         updateStreak // Expose this function if other components need to trigger a streak check
+//     };
+
+//     return (
+//         <StreakContext.Provider value={streakContextValue}>
+//             {children}
+//         </StreakContext.Provider>
+//     );
+// };
+
+// export default StreakTracker;
+// src/components/StreakTracker.js
+
+import React, { useEffect, useState, createContext, useContext } from 'react';
 import { ref, get, update, onValue } from 'firebase/database';
 import { database } from "../services/FirebaseConfig.js"
 import { useTelegram } from '../reactContext/TelegramContext.js'; // Correct path assumed
@@ -39,7 +260,7 @@ const StreakTracker = ({ children }) => {
 
     // This function runs the core streak logic
     // It should be called when a "streak-qualifying" action occurs (e.g., app load)
-    const updateStreak = useCallback(async () => {
+    const updateStreak = async () => {
         if (!user || !user.id) { // Check if user object and ID are available
             console.warn("No user ID available for streak update.");
             setLoadingStreak(false);
@@ -167,7 +388,7 @@ const StreakTracker = ({ children }) => {
         } finally {
             setLoadingStreak(false);
         }
-    }, [user, db]);
+    };
 
     // Listen for real-time updates to display current streak in Navbar etc.
     useEffect(() => {
@@ -208,7 +429,7 @@ const StreakTracker = ({ children }) => {
 
             return () => clearTimeout(timeoutId); // Cleanup timeout
         }
-    }, [user, updateStreak]); // Trigger when user object's ID becomes available
+    }, [user.id]); // Trigger when user object's ID becomes available
 
     // Function to close the popup, exposed via context
     const closeStreakPopup = () => {

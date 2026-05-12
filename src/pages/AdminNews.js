@@ -12,12 +12,11 @@ import {
   orderByChild
 } from 'firebase/database';
 import { database } from "../services/FirebaseConfig";
-import { FiEdit, FiTrash2, FiPlus, FiSave, FiX } from 'react-icons/fi';
+import { Pencil, Trash2, Plus, Save, X, ExternalLink, Newspaper, ThumbsUp } from 'lucide-react';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import "../Styles/AdminNews.css";
 
-// Helper function to format a timestamp into a human-readable format
 const formatDate = (timestamp) => {
   if (!timestamp) return 'N/A';
   const date = new Date(timestamp);
@@ -31,13 +30,10 @@ const formatDate = (timestamp) => {
 };
 
 const AdminNews = () => {
-  // State for the list of news items
   const [newsList, setNewsList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  
-  // State for managing the add/edit modal
   const [newsModalOpen, setNewsModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState('add'); // Can be 'add' or 'edit'
+  const [modalMode, setModalMode] = useState('add');
   const [currentNews, setCurrentNews] = useState({
     title: '',
     summary: '',
@@ -46,13 +42,10 @@ const AdminNews = () => {
     readMoreLink: '',
   });
   const [editingNewsId, setEditingNewsId] = useState(null);
-  
-  // State for managing the delete confirmation modal
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteNewsId, setDeleteNewsId] = useState(null);
   const [deleteNewsTitle, setDeleteNewsTitle] = useState('');
 
-  // Load news data from Firebase in realtime
   useEffect(() => {
     const newsRef = query(ref(database, 'news'), orderByChild('createdAt'));
     const unsubscribe = onValue(
@@ -60,7 +53,6 @@ const AdminNews = () => {
       (snapshot) => {
         const data = snapshot.val();
         if (data) {
-          // Map each news item into an array and sort descending based on createdAt
           const newsArray = Object.entries(data)
             .map(([id, item]) => ({ id, ...item }))
             .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -78,7 +70,6 @@ const AdminNews = () => {
     return () => unsubscribe();
   }, []);
 
-  // Open modal for adding a new news item
   const openAddModal = () => {
     setModalMode('add');
     setCurrentNews({
@@ -92,7 +83,6 @@ const AdminNews = () => {
     setNewsModalOpen(true);
   };
 
-  // Open modal for editing an existing news item
   const openEditModal = async (newsId) => {
     try {
       const snapshot = await get(ref(database, `news/${newsId}`));
@@ -116,14 +106,12 @@ const AdminNews = () => {
     }
   };
 
-  // Open delete confirmation modal
   const openDeleteModal = (newsId, title) => {
     setDeleteNewsId(newsId);
     setDeleteNewsTitle(title);
     setDeleteModalOpen(true);
   };
 
-  // Handle add/edit form submission
   const handleModalSubmit = async (e) => {
     e.preventDefault();
     const trimmedTitle = currentNews.title.trim();
@@ -131,7 +119,7 @@ const AdminNews = () => {
     const trimmedCategory = currentNews.category.trim();
     const trimmedImageUrl = currentNews.imageUrl.trim();
     const trimmedReadMoreLink = currentNews.readMoreLink.trim();
-    
+
     if (!trimmedTitle || !trimmedSummary || !trimmedCategory) {
       toast.error('Please fill in all required fields');
       return;
@@ -139,7 +127,6 @@ const AdminNews = () => {
 
     try {
       if (modalMode === 'edit' && editingNewsId) {
-        // Update existing news item without changing its ID
         await update(ref(database, `news/${editingNewsId}`), {
           title: trimmedTitle,
           summary: trimmedSummary,
@@ -150,7 +137,6 @@ const AdminNews = () => {
         });
         toast.success('News updated successfully');
       } else {
-        // Add new news item. Using push() generates a unique ID and the news will be added last in the database.
         const newNewsRef = push(ref(database, 'news'));
         await set(newNewsRef, {
           title: trimmedTitle,
@@ -168,7 +154,6 @@ const AdminNews = () => {
     }
   };
 
-  // Handle deletion of a news item
   const handleDeleteConfirm = async () => {
     try {
       await remove(ref(database, `news/${deleteNewsId}`));
@@ -181,13 +166,17 @@ const AdminNews = () => {
 
   return (
     <div className="news-manager">
-      <ToastContainer />
+      <ToastContainer position="bottom-right" theme="colored" />
       <header>
-        <h1>News Manager</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <Newspaper size={28} color="#6366f1" />
+          <h1>News Manager</h1>
+        </div>
         <button className="add-news-btn" onClick={openAddModal}>
-          <FiPlus /> Add News
+          <Plus size={18} /> Add News
         </button>
       </header>
+
       <section className="news-list-section">
         {isLoading ? (
           <div className="loading">Loading news...</div>
@@ -195,169 +184,155 @@ const AdminNews = () => {
           <table className="news-table">
             <thead>
               <tr>
-                <th>ID</th>
-                <th>Title</th>
-                <th>Summary</th>
+                <th>#</th>
+                <th>Title & Summary</th>
                 <th>Category</th>
-                <th>Image</th>
-                <th>Created</th>
+                <th>Likes</th>
+                <th>Links</th>
+                <th>Created At</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {newsList.map((newsItem, index) => (
                 <tr key={newsItem.id}>
-                  <td>{index + 1}</td>
-                  <td>{newsItem.title}</td>
-                  <td>{newsItem.summary}</td>
-                  <td>{newsItem.category}</td>
+                  <td style={{ fontWeight: '600', color: '#9ca3af' }}>{index + 1}</td>
                   <td>
-                    {newsItem.imageUrl ? (
-                      <a
-                        href={newsItem.imageUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="View image"
-                      >
-                        View
-                      </a>
-                    ) : (
-                      'N/A'
-                    )}
+                    <div style={{ fontWeight: '600', color: '#111827' }}>{newsItem.title}</div>
+                    <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                      {newsItem.summary.length > 100 ? newsItem.summary.substring(0, 100) + '...' : newsItem.summary}
+                    </div>
                   </td>
-                  <td>{formatDate(newsItem.createdAt)}</td>
-                  <td className="actions-cell">
-                    <button
-                      className="edit-btn"
-                      onClick={() => openEditModal(newsItem.id)}
-                      title="Edit news"
-                    >
-                      <FiEdit />
-                    </button>
-                    <button
-                      className="delete-btn"
-                      onClick={() => openDeleteModal(newsItem.id, newsItem.title)}
-                      title="Delete news"
-                    >
-                      <FiTrash2 />
-                    </button>
+                  <td><span className="badge badge-cat">{newsItem.category}</span></td>
+                  <td style={{ textAlign: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
+                      <ThumbsUp size={14} color="#3b82f6" />
+                      <span style={{ fontWeight: '600' }}>{newsItem.likes || 0}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {newsItem.imageUrl && (
+                        <a href={newsItem.imageUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
+                          <ExternalLink size={12} /> Image
+                        </a>
+                      )}
+                      {newsItem.readMoreLink && (
+                        <a href={newsItem.readMoreLink} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
+                          <ExternalLink size={12} /> Read More
+                        </a>
+                      )}
+                    </div>
+                  </td>
+                  <td style={{ fontSize: '12px', color: '#6b7280' }}>{formatDate(newsItem.createdAt)}</td>
+                  <td>
+                    <div className="actions-cell">
+                      <button className="edit-btn" onClick={() => openEditModal(newsItem.id)} title="Edit News">
+                        <Pencil size={16} color="#6366f1" />
+                      </button>
+                      <button className="delete-btn" onClick={() => openDeleteModal(newsItem.id, newsItem.title)} title="Delete News">
+                        <Trash2 size={16} color="#ef4444" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         ) : (
-          <div className="empty-state">No news items available</div>
+          <div className="empty-state">No news items available. Start by adding one!</div>
         )}
       </section>
+
       {/* Modal for Add/Edit News */}
       {newsModalOpen && (
         <div className="modal-overlay" onClick={() => setNewsModalOpen(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>{modalMode === 'edit' ? 'Edit News' : 'Add News'}</h2>
+              <h2>{modalMode === 'edit' ? 'Edit News' : 'Add New News'}</h2>
               <button className="modal-close" onClick={() => setNewsModalOpen(false)}>
-                <FiX />
+                <X size={20} />
               </button>
             </div>
             <form onSubmit={handleModalSubmit}>
               <div className="form-group">
-                <label htmlFor="modalNewsTitle">Title</label>
+                <label>Title</label>
                 <input
                   type="text"
-                  id="modalNewsTitle"
+                  placeholder="Enter title"
                   value={currentNews.title}
-                  onChange={(e) =>
-                    setCurrentNews({ ...currentNews, title: e.target.value })
-                  }
+                  onChange={(e) => setCurrentNews({ ...currentNews, title: e.target.value })}
                   required
                 />
               </div>
               <div className="form-group">
-                <label htmlFor="modalNewsSummary">Summary</label>
+                <label>Summary</label>
                 <input
-                  id="modalNewsSummary"
+                  placeholder="Enter brief summary"
                   value={currentNews.summary}
-                  onChange={(e) =>
-                    setCurrentNews({ ...currentNews, summary: e.target.value })
-                  }
+                  onChange={(e) => setCurrentNews({ ...currentNews, summary: e.target.value })}
                   required
                 />
               </div>
               <div className="form-group">
-                <label htmlFor="modalNewsCategory">Category</label>
+                <label>Category</label>
                 <input
                   type="text"
-                  id="modalNewsCategory"
+                  placeholder="e.g. Technology, Update"
                   value={currentNews.category}
-                  onChange={(e) =>
-                    setCurrentNews({ ...currentNews, category: e.target.value })
-                  }
+                  onChange={(e) => setCurrentNews({ ...currentNews, category: e.target.value })}
                   required
                 />
               </div>
               <div className="form-group">
-                <label htmlFor="modalNewsImageUrl">Image URL</label>
+                <label>Image URL</label>
                 <input
                   type="text"
-                  id="modalNewsImageUrl"
+                  placeholder="https://example.com/image.jpg"
                   value={currentNews.imageUrl}
-                  onChange={(e) =>
-                    setCurrentNews({ ...currentNews, imageUrl: e.target.value })
-                  }
+                  onChange={(e) => setCurrentNews({ ...currentNews, imageUrl: e.target.value })}
                 />
               </div>
               <div className="form-group">
-                <label htmlFor="modalNewsReadMoreLink">ReadMore URL</label>
+                <label>Read More URL</label>
                 <input
                   type="text"
-                  id="modalNewsReadMoreLink"
+                  placeholder="https://example.com/full-article"
                   value={currentNews.readMoreLink}
-                  onChange={(e) =>
-                    setCurrentNews({ ...currentNews, readMoreLink: e.target.value })
-                  }
+                  onChange={(e) => setCurrentNews({ ...currentNews, readMoreLink: e.target.value })}
                 />
               </div>
               <div className="modal-actions">
                 <button type="button" className="cancel-btn" onClick={() => setNewsModalOpen(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="submit-btn">
-                  {modalMode === 'edit' ? (
-                    <>
-                      <FiSave /> Update
-                    </>
-                  ) : (
-                    <>
-                      <FiPlus /> Add
-                    </>
-                  )}
+                <button type="submit" className="submit-btn" style={{ padding: '10px 24px' }}>
+                  {modalMode === 'edit' ? <><Save size={18} /> Update</> : <><Plus size={18} /> Add</>}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
       {/* Modal for Delete Confirmation */}
       {deleteModalOpen && (
         <div className="modal-overlay" onClick={() => setDeleteModalOpen(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content" style={{ maxWidth: '400px' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Confirm Delete</h2>
               <button className="modal-close" onClick={() => setDeleteModalOpen(false)}>
-                <FiX />
+                <X size={20} />
               </button>
             </div>
             <div className="modal-body">
-              <p>
-                Are you sure you want to delete <strong>{deleteNewsTitle}</strong>?
-              </p>
+              <p>Are you sure you want to delete <br /><strong>{deleteNewsTitle}</strong>?</p>
             </div>
             <div className="modal-actions">
               <button type="button" className="cancel-btn" onClick={() => setDeleteModalOpen(false)}>
                 Cancel
               </button>
-              <button type="button" className="delete-btn" onClick={handleDeleteConfirm}>
+              <button type="button" className="submit-btn delete-btn" style={{ background: '#ef4444' }} onClick={handleDeleteConfirm}>
                 Delete
               </button>
             </div>
