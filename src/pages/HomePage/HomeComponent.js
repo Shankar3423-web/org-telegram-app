@@ -54,7 +54,7 @@ export default function HomeComponent() {
 
   useEffect(() => {
     const tasksRef = ref(database, "tasks");
-    const userTasksRef = ref(database, `connections/${user.id}`);
+    const userTasksRef = ref(database, `connections/${user.id}/tasks`);
     const newsRef = ref(database, `connections/${user.id}/tasks/daily/news`);
     // Query news to find top liked
     const allNewsRef = ref(database, "news");
@@ -67,7 +67,9 @@ export default function HomeComponent() {
           return Object.entries(categoryTasks).map(([key, task]) => ({
             ...task,
             id: task.id || key,
-            category: task.category || category
+            category: task.category || category,
+            points: task.xp || task.score || task.points || 0,
+            total: task.target || task.total || 1
           }));
         });
         setTasks(tasksArray);
@@ -118,30 +120,11 @@ export default function HomeComponent() {
 
 
 
-  const isToday = (timestamp) => {
-    if (!timestamp) return false;
-    const date = new Date(timestamp);
-    const today = new Date();
-    return date.getDate() === today.getDate() &&
-      date.getMonth() === today.getMonth() &&
-      date.getFullYear() === today.getFullYear();
-  };
 
   const isTaskDone = (task) => {
-    const { id, type } = task;
-    const status = userTasks[id];
-    if (status === undefined || status === null || status === false) return false;
-
-    const RESET_TYPES = ['game', 'news', 'partnership'];
-    if (RESET_TYPES.includes(type)) {
-      if (task.category === 'achievements') return true;
-      if (status === true) return false;
-      if (typeof status === 'object' && status.lastClaimed) {
-        return isToday(status.lastClaimed);
-      }
-      return false;
-    }
-    return true;
+    if (!task || !task.id) return false;
+    const uTask = userTasks[task.category]?.[task.id] || {};
+    return uTask.claimed === true;
   };
 
   // Optimize navigation handlers
@@ -485,34 +468,44 @@ export default function HomeComponent() {
                   </div>
                   <div className="space-y-3">
                     {tasks
-                      .filter(task => {
-                        const title = task.title.toLowerCase();
-                        return title.includes('read 5 news') || title.includes('invite') || title.includes('refer');
-                      })
+                      .filter(task => task.category === 'daily')
                       .map(task => {
+                        const uTask = userTasks['daily']?.[task.id] || {};
                         const done = isTaskDone(task);
-                        const progress = task.title.toLowerCase().includes('news') ? newsCount : (task.completed || 0);
-                        const displayProgress = done ? task.total : (progress > task.total ? task.total : progress);
+                        // points and total are already normalized during task fetch
+                        const points = task.points;
+                        const total = task.total;
+                        const rawProgress = task.type === 'news' ? newsCount : (uTask.progress || 0);
+                        const displayProgress = done ? total : Math.min(rawProgress, total);
 
                         return (
-                          <div key={task.id} className="flex items-center justify-between p-2 bg-white/5 rounded-lg border border-white/10 cursor-pointer" onClick={() => navigate('/tasks')}>
+                          <div
+                            key={task.id}
+                            className="flex items-center justify-between p-2 bg-white/5 rounded-lg border border-white/10 cursor-pointer"
+                            onClick={() => navigate('/tasks')}
+                          >
                             <div className="flex items-center gap-3">
                               <div className={`${task.iconBg || 'bg-indigo-500/30'} p-2 rounded-full`}>
-                                {task.icon === 'Users' ? <Users className="h-4 w-4 text-amber-200" /> : <Zap className="h-4 w-4 text-indigo-200" />}
+                                {task.icon === 'Users'
+                                  ? <Users className="h-4 w-4 text-amber-200" />
+                                  : <Zap className="h-4 w-4 text-indigo-200" />}
                               </div>
                               <div>
                                 <p className="text-sm font-medium text-white">{task.title}</p>
                                 <p className="text-xs text-white/60">
-                                  {done ? 'Completed' : `${displayProgress}/${task.total} completed`}
+                                  {done ? 'Completed' : `${displayProgress}/${total} completed`}
                                 </p>
                               </div>
                             </div>
                             <Badge className={`${done ? 'bg-green-600/80' : 'bg-indigo-600/80'} text-white`}>
-                              {done ? 'Done' : `+${task.points} XP`}
+                              {done ? 'Done' : `+${points} XP`}
                             </Badge>
                           </div>
                         );
                       })}
+                    {tasks.filter(t => t.category === 'daily').length === 0 && (
+                      <p className="text-white/50 text-sm text-center py-2">No daily tasks available</p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
