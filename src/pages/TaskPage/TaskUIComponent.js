@@ -145,14 +145,9 @@ export default function TasksPage() {
   };
 
   const handleDailyCompletionForWeekly = async () => {
-    const allDailyTasks = tasks.daily || {};
-    const userDailyTasks = userTasks.daily || {};
+    if (dailyTasks.length === 0) return;
 
-    if (Object.keys(allDailyTasks).length === 0) return;
-
-    const allCompleted = Object.keys(allDailyTasks).every(
-      taskId => userDailyTasks[taskId]?.completed === true
-    );
+    const allCompleted = dailyTasks.every(task => task.isTaskCompleted);
 
     if (!allCompleted) return;
 
