@@ -156,28 +156,35 @@ export default function TasksPage() {
     if (!allCompleted) return;
 
     const today = new Date().toDateString();
-    const lastDateRef = ref(database, `connections/${userId}/meta/lastDailyCompleteDate`);
-    const lastSnap = await get(lastDateRef);
-
-    if (lastSnap.val() === today) return;
+    let globalUpdateOccurred = false;
 
     const wTasks = tasks.weekly || {};
     for (const [weeklyTaskId, weeklyTask] of Object.entries(wTasks)) {
       if (weeklyTask.weeklyMode === "tracked") {
         const userWeeklyRef = ref(database, `connections/${userId}/tasks/weekly/${weeklyTaskId}`);
         const userWeeklySnap = await get(userWeeklyRef);
+        const userData = userWeeklySnap.val() || {};
 
-        const current = userWeeklySnap.val()?.progress || 0;
+        if (userData.lastDailyCompleteDate === today) continue;
+
+        const current = userData.progress || 0;
         const next = current + 1;
 
         await update(userWeeklyRef, {
           progress: next,
           completed: next >= weeklyTask.target,
+          lastDailyCompleteDate: today,
           lastUpdated: Date.now()
         });
+        
+        globalUpdateOccurred = true;
       }
     }
-    await set(lastDateRef, today);
+
+    if (globalUpdateOccurred) {
+      const lastDateRef = ref(database, `connections/${userId}/meta/lastDailyCompleteDate`);
+      await set(lastDateRef, today);
+    }
   }, [dailyTasks, tasks.weekly, userId]);
 
   useEffect(() => {
@@ -480,7 +487,24 @@ export default function TasksPage() {
                             <h3 className="font-semibold text-white">{task.title}</h3>
                             <p className="text-xs text-white/70 mt-1">{task.description}</p>
                           </div>
-                          <Badge className="bg-amber-500/90">+{task.points} XP</Badge>
+                          <div className="flex flex-col gap-1 items-end">
+                            <Badge className="bg-amber-500/90 whitespace-nowrap">+{task.points} XP</Badge>
+                            <button
+                              className={`rounded text-white text-sm px-2 py-1 mt-1 whitespace-nowrap ${isTaskDone(task) && task.type !== 'partnership' && task.type !== 'social' ? 'bg-gray-500 cursor-not-allowed' : 'bg-violet-500 hover:bg-violet-700'}`}
+                              id={`clickBtn${task.id}`}
+                              disabled={isTaskDone(task) && task.type !== 'partnership' && task.type !== 'social'}
+                              onClick={() => handleTitle(task, task.id)}
+                            >
+                              {isTaskDone(task)
+                                ? (task.type === 'partnership' || task.type === 'social' ? "Open" : "Done")
+                                : (
+                                  task.isTaskCompleted
+                                    ? "Claim"
+                                    : (task.type === "watch" && task.started && task.watchCode ? "Enter Code" : (buttonText[task.id] || "Start Task"))
+                                )
+                              }
+                            </button>
+                          </div>
                         </div>
                         <div className="mt-3">
                           <div className="flex justify-between text-xs text-white/70 mb-1">
@@ -508,7 +532,24 @@ export default function TasksPage() {
                             <h3 className="font-semibold text-white">{task.title}</h3>
                             <p className="text-xs text-white/70 mt-1">{task.description}</p>
                           </div>
-                          <Badge className="bg-amber-500/90">+{task.points} XP</Badge>
+                          <div className="flex flex-col gap-1 items-end">
+                            <Badge className="bg-amber-500/90 whitespace-nowrap">+{task.points} XP</Badge>
+                            <button
+                              className={`rounded text-white text-sm px-2 py-1 mt-1 whitespace-nowrap ${isTaskDone(task) && task.type !== 'partnership' && task.type !== 'social' ? 'bg-gray-500 cursor-not-allowed' : 'bg-violet-500 hover:bg-violet-700'}`}
+                              id={`clickBtn${task.id}`}
+                              disabled={isTaskDone(task) && task.type !== 'partnership' && task.type !== 'social'}
+                              onClick={() => handleTitle(task, task.id)}
+                            >
+                              {isTaskDone(task)
+                                ? (task.type === 'partnership' || task.type === 'social' ? "Open" : "Done")
+                                : (
+                                  task.isTaskCompleted
+                                    ? "Claim"
+                                    : (task.type === "watch" && task.started && task.watchCode ? "Enter Code" : (buttonText[task.id] || "Start Task"))
+                                )
+                              }
+                            </button>
+                          </div>
                         </div>
                         <div className="mt-3">
                           <div className="flex justify-between text-xs text-white/70 mb-1">
