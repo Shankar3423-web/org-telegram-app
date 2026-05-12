@@ -83,7 +83,13 @@ export default function HomeComponent() {
     });
 
     const unsubscribeNews = onValue(newsRef, (snapshot) => {
-      setNewsCount(snapshot.exists() ? Object.keys(snapshot.val() || {}).length : 0);
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const count = Object.keys(data).filter(k => !['claimed', 'claimedAt', 'completed', 'progress', 'lastUpdated'].includes(k)).length;
+        setNewsCount(count);
+      } else {
+        setNewsCount(0);
+      }
     });
 
     const unsubscribeTopNews = onValue(allNewsRef, (snapshot) => {

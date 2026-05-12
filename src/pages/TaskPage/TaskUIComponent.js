@@ -26,6 +26,9 @@ export default function TasksPage() {
   const [videoTimer, setVideoTimer] = useState(0);
   const [activeTaskId, setActiveTaskId] = useState(null);
 
+  const [newsCount, setNewsCount] = useState(0);
+  const [gameCompleted, setGameCompleted] = useState(false);
+
   const userId = user?.id;
 
   useEffect(() => {
@@ -42,6 +45,8 @@ export default function TasksPage() {
     if (!userId) return;
     const tasksRef = ref(database, "tasks");
     const userTasksRef = ref(database, `connections/${userId}/tasks`);
+    const newsRef = ref(database, `connections/${userId}/tasks/daily/news`);
+    const gameRef = ref(database, `connections/${userId}/tasks/daily/game`);
 
     const unsubTasks = onValue(tasksRef, snap => {
       setTasks(snap.val() || {});
@@ -51,9 +56,25 @@ export default function TasksPage() {
       setUserTasks(snap.val() || {});
     });
 
+    const unsubNews = onValue(newsRef, snap => {
+      if (snap.exists()) {
+        const data = snap.val();
+        const count = Object.keys(data).filter(k => !['claimed', 'claimedAt', 'completed', 'progress', 'lastUpdated'].includes(k)).length;
+        setNewsCount(count);
+      } else {
+        setNewsCount(0);
+      }
+    });
+
+    const unsubGame = onValue(gameRef, snap => {
+      setGameCompleted(snap.exists() ? snap.val() === true || snap.val().completed === true : false);
+    });
+
     return () => {
       unsubTasks();
       unsubUserTasks();
+      unsubNews();
+      unsubGame();
     };
   }, [userId]);
 
@@ -74,8 +95,26 @@ export default function TasksPage() {
   const processedTasks = useMemo(() => {
     return Object.entries(tasks).flatMap(([category, catTasks]) =>
       Object.entries(catTasks || {}).map(([id, task]) => {
-        const uTask = userTasks[category]?.[id] || {};
+        let uTask = userTasks[category]?.[id];
         
+        let completedProgress = 0;
+        let isClaimed = false;
+        
+        if (typeof uTask === 'object' && uTask !== null) {
+          completedProgress = uTask.progress || 0;
+          isClaimed = uTask.claimed || false;
+        }
+
+        const totalReq = task.target || task.total || 1;
+
+        if (task.type === 'news') {
+          completedProgress = newsCount;
+        } else if (task.type === 'game' && gameCompleted) {
+          completedProgress = totalReq;
+        }
+
+        const isTaskCompleted = (typeof uTask === 'object' && uTask?.completed) || completedProgress >= totalReq;
+
         const iconKey = typeof task.icon === 'string'
           ? Object.keys(IconMap).find(k => k.toLowerCase() === task.icon.toLowerCase())
           : null;
@@ -85,24 +124,21 @@ export default function TasksPage() {
           category,
           ...task,
           points: task.xp || task.score || task.points || 0,
-          completed: uTask.progress || 0,
-          total: task.target || task.total || 1,
-          claimed: uTask.claimed || false,
-          started: uTask.started || false,
+          completed: completedProgress,
+          isTaskCompleted: isTaskCompleted,
+          total: totalReq,
+          claimed: isClaimed,
+          started: (typeof uTask === 'object' && uTask?.started) || false,
           icon: iconKey ? IconMap[iconKey] : (IconMap['Zap'] || <Zap className="h-5 w-5 text-indigo-300" />),
           iconBg: task.iconBg || "bg-indigo-500/30",
         };
       })
     );
-  }, [tasks, userTasks, IconMap]);
+  }, [tasks, userTasks, IconMap, newsCount, gameCompleted]);
 
   const dailyTasks = processedTasks.filter(t => t.category === "daily");
   const weeklyTasks = processedTasks.filter(t => t.category === "weekly");
   const achievements = processedTasks.filter(t => t.category === "achievements");
-
-
-  const gameCompleted = false;
-  const newsCount = 0;
 
   const isTaskDone = (task) => {
     return task.claimed === true;
@@ -200,9 +236,7 @@ export default function TasksPage() {
   const handleTitle = async (task, taskId) => {
     if (!userId) return;
 
-    const uTask = userTasks[task.category]?.[taskId] || {};
-    const progress = uTask.progress || 0;
-    const isCompleted = uTask.completed || progress >= (task.target || task.total || 1);
+    const isCompleted = task.isTaskCompleted;
     
     if (!isCompleted) {
       if (task.type === "watch") {
@@ -395,9 +429,7 @@ export default function TasksPage() {
                               {isTaskDone(task)
                                 ? (task.type === 'partnership' || task.type === 'social' ? "Open" : "Done")
                                 : (
-                                  (userTasks[task.id] === false && (task.type !== 'news' || newsCount >= 5)) ||
-                                    (task.type === 'weekly' && task.completed >= task.total) ||
-                                    ((task.type === 'referral' || task.category === 'daily') && task.completed >= task.total)
+                                  task.isTaskCompleted
                                     ? "Claim"
                                     : buttonText[task.id] || "Start Task"
                                 )
@@ -408,9 +440,9 @@ export default function TasksPage() {
                         <div className="mt-3">
                           <div className="flex justify-between text-xs text-white/70 mb-1">
                             <span>Progress</span>
-                            <span>{((task.type === "game" && gameCompleted) || isTaskDone(task) ? task.total : task.completed)}/{task.total}</span>
+                            <span>{isTaskDone(task) || task.isTaskCompleted ? task.total : Math.min(task.completed, task.total)}/{task.total}</span>
                           </div>
-                          <Progress value={(task.type === "game" && gameCompleted ? 100 : (isTaskDone(task) ? 100 : (task.completed / task.total) * 100))} className="h-1.5 bg-white/10" />
+                          <Progress value={isTaskDone(task) || task.isTaskCompleted ? 100 : (Math.min(task.completed, task.total) / task.total) * 100} className="h-1.5 bg-white/10" />
                         </div>
                       </div>
                     </div>
@@ -436,9 +468,9 @@ export default function TasksPage() {
                         <div className="mt-3">
                           <div className="flex justify-between text-xs text-white/70 mb-1">
                             <span>Progress</span>
-                            <span>{((task.type === "game" && gameCompleted) || isTaskDone(task) ? task.total : task.completed)}/{task.total}</span>
+                            <span>{isTaskDone(task) || task.isTaskCompleted ? task.total : Math.min(task.completed, task.total)}/{task.total}</span>
                           </div>
-                          <Progress value={(isTaskDone(task) ? 100 : (task.completed / task.total) * 100)} className="h-1.5 bg-white/10" />
+                          <Progress value={isTaskDone(task) || task.isTaskCompleted ? 100 : (Math.min(task.completed, task.total) / task.total) * 100} className="h-1.5 bg-white/10" />
                         </div>
                       </div>
                     </div>
@@ -464,9 +496,9 @@ export default function TasksPage() {
                         <div className="mt-3">
                           <div className="flex justify-between text-xs text-white/70 mb-1">
                             <span>Progress</span>
-                            <span>{((task.type === "game" && gameCompleted) || isTaskDone(task) ? task.total : task.completed)}/{task.total}</span>
+                            <span>{isTaskDone(task) || task.isTaskCompleted ? task.total : Math.min(task.completed, task.total)}/{task.total}</span>
                           </div>
-                          <Progress value={(task.completed / task.total) * 100} className="h-1.5 bg-white/10" />
+                          <Progress value={isTaskDone(task) || task.isTaskCompleted ? 100 : (Math.min(task.completed, task.total) / task.total) * 100} className="h-1.5 bg-white/10" />
                         </div>
                       </div>
                     </div>
@@ -504,11 +536,7 @@ export default function TasksPage() {
                                 {isTaskDone(task)
                                   ? (task.type === 'partnership' || task.type === 'social' ? "Open" : "Done")
                                   : (
-                                    (userTasks[taskId] === false) ||
-                                      (task.type === 'weekly' && task.completed >= task.total) ||
-                                      (task.type === 'game' && gameCompleted) ||
-                                      ((task.type === 'referral' || task.category === 'daily') && task.completed >= task.total) ||
-                                      (task.type === 'news' && newsCount >= 5)
+                                      task.isTaskCompleted
                                       ? "Claim"
                                       : buttonText[taskId] || "Start Task"
                                   )
@@ -519,10 +547,10 @@ export default function TasksPage() {
                           <div className="mt-3">
                             <div className="flex justify-between text-xs text-white/70 mb-1">
                               <span>Progress</span>
-                              <span>{((task.type === "game" && gameCompleted) || isTaskDone(task) ? task.total : task.completed)}/{task.total}</span>
+                              <span>{isTaskDone(task) || task.isTaskCompleted ? task.total : Math.min(task.completed, task.total)}/{task.total}</span>
                             </div>
                             <Progress
-                              value={isTaskDone(task) ? 100 : (task.completed / task.total) * 100}
+                              value={isTaskDone(task) || task.isTaskCompleted ? 100 : (Math.min(task.completed, task.total) / task.total) * 100}
                               className="h-1.5 bg-white/10"
                             />
                           </div>
