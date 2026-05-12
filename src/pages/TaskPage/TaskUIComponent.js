@@ -20,6 +20,7 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState({});
   const [userTasks, setUserTasks] = useState({});
   const [filterType, setFilterType] = useState("all");
+  const [activeTab, setActiveTab] = useState("daily");
   const [buttonText, setButtonText] = useState({});
   
   const [selectedVideo, setSelectedVideo] = useState(null);
@@ -283,10 +284,10 @@ export default function TasksPage() {
          const { chatId } = await handleChatId(task.url);
          startMembershipCheck(taskId, chatId, task.category);
          return;
-      } else if (task.type === "news") {
+      } else if (task.type === "news" || task.title.toLowerCase().includes("news")) {
          navigate("/news");
          return;
-      } else if (task.type === "game") {
+      } else if (task.type === "game" || task.title.toLowerCase().includes("game") || task.title.toLowerCase().includes("fruit ninja")) {
          navigate("/game");
          return;
       } else if (task.type === "partnership" || task.type === "referral") {
@@ -294,6 +295,9 @@ export default function TasksPage() {
          return;
       } else if (task.url) {
          window.open(task.url, "_blank");
+         return;
+      } else if (task.category === "weekly" && (task.title.toLowerCase().includes("daily") || task.description?.toLowerCase().includes("daily"))) {
+         setActiveTab("daily");
          return;
       }
     }
@@ -408,7 +412,7 @@ export default function TasksPage() {
             </div>
           </div>
 
-          <Tabs defaultValue="daily" className="mb-6">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
             <TabsList className="flex gap-4 bg-white/10 p-0.5 overflow-auto scroll-hidden">
               {["daily", "weekly", "achievements", "all", "watch", "social", "partnership", "misc"].map((tab) => (
                 <TabsTrigger
