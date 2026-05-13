@@ -153,7 +153,7 @@ const WelcomePopup = ({ onClose }) => {
           <div className="popup-title">Welcome to Web3Today!</div>
           <div className="popup-subtitle">You joined via a referral 🎉</div>
           <div className="points-badge">
-            +100 Points <span className="celebrate-emoji">✨</span>
+            +50 Points <span className="celebrate-emoji">✨</span>
           </div>
           <div style={{ color: "#6d28d9", fontWeight: 500, fontSize: "0.95rem" }}>
             Enjoy your bonus and start exploring!
