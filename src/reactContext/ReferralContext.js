@@ -1,21 +1,20 @@
 // src/reactContext/ReferralContext.js
+// NOTE: Referral processing (reward logic, score updates) is now handled
+// inside userManagement.js → initializeUser(). This context is only for
+// UI concerns: invite link, friend list, share helpers, and welcome popup.
 
 import React, {
   createContext,
   useContext,
   useState,
   useEffect,
-  useCallback
 } from "react";
 
 import { useTelegram } from "./TelegramContext.js";
 import { database } from "../services/FirebaseConfig.js";
 import {
   ref,
-  get,
-  update,
   onValue,
-  runTransaction
 } from "firebase/database";
 
 const ReferralContext = createContext();
@@ -28,152 +27,23 @@ export const ReferralProvider = ({ children }) => {
   const [invitedFriends, setInvitedFriends] = useState([]);
   const [showWelcomePopup, setShowWelcomePopup] = useState(false);
 
-  // ==============================
-  // DEV MODE (TURN OFF IN PROD)
-  // ==============================
-  const DEV_FORCE_REFERRAL = false;
-  const DEV_REFERRER_ID = "6743986736";
-
   // ======================================
-  // SAFE SCORE UPDATE (FULL USER TXN)
-  // ======================================
-  const updateScores = useCallback(async (userId, amount) => {
-    const userRef = ref(database, `users/${userId}`);
-
-    await runTransaction(userRef, (data) => {
-      if (!data) return data;
-
-      if (!data.Score) {
-        data.Score = {
-          farming_score: 0,
-          network_score: 0,
-          game_score: 0,
-          news_score: 0,
-          task_score: 0,
-          total_score: 0,
-          game_highest_score: 0,
-          no_of_tickets: 3,
-        };
-      }
-
-      data.Score.network_score =
-        (data.Score.network_score || 0) + amount;
-
-      data.Score.total_score =
-        (data.Score.total_score || 0) + amount;
-
-      return data;
-    });
-  }, []);
-
-  // ======================================
-  // MAIN REFERRAL LOGIC (ONLY HERE)
-  // ======================================
-  const processReferralReward = useCallback(
-    async (referrerId, newUserId) => {
-      if (!referrerId || !newUserId) return;
-      if (referrerId === newUserId) return;
-
-      const referrerSnap = await get(
-        ref(database, `users/${referrerId}`)
-      );
-      const newUserSnap = await get(
-        ref(database, `users/${newUserId}`)
-      );
-
-      if (!referrerSnap.exists() || !newUserSnap.exists()) return;
-
-      // IMPORTANT: check if already processed
-      const referredBySnap = await get(
-        ref(database, `users/${newUserId}/referredBy`)
-      );
-
-      if (referredBySnap.exists()) {
-        return; // already rewarded
-      }
-
-      const timestamp = Date.now();
-      const newUserName =
-        newUserSnap.val().name || "Unknown";
-
-      const updates = {};
-
-      // set referredBy
-      updates[`users/${newUserId}/referredBy`] = {
-        id: referrerId,
-        name: referrerSnap.val().name || "Unknown",
-      };
-
-      updates[`users/${newUserId}/referralSource`] = "Invite";
-
-      // add inside referrer
-      updates[`users/${referrerId}/referrals/${newUserId}`] = {
-        id: newUserId,
-        name: newUserName,
-        joinedAt: timestamp,
-        xp: 50,
-      };
-
-      await update(ref(database), updates);
-
-      // 🔥 LEVEL 1
-      await updateScores(referrerId, 100);
-      await updateScores(newUserId, 50);
-
-      // 🔥 LEVEL 2
-      const parent = referrerSnap.val().referredBy;
-      if (parent?.id) {
-        await updateScores(parent.id, 20);
-
-        const grandSnap = await get(
-          ref(database, `users/${parent.id}`)
-        );
-        const grand = grandSnap.val()?.referredBy;
-
-        if (grand?.id) {
-          await updateScores(grand.id, 10);
-        }
-      }
-
-      setShowWelcomePopup(true);
-    },
-    [updateScores]
-  );
-
-  // ======================================
-  // HANDLE START PARAM
+  // CHECK IF REFERRAL WAS JUST PROCESSED
+  // (Signal from userManagement.js via sessionStorage)
   // ======================================
   useEffect(() => {
     if (!user?.id) return;
 
-    const tg = window.Telegram?.WebApp;
-    if (!tg) return;
-
-    tg.ready();
-
-    const handleReferral = async () => {
-      let startParam = tg.initDataUnsafe?.start_param;
-
-      if (!startParam && DEV_FORCE_REFERRAL) {
-        startParam = `ref_dev_${DEV_REFERRER_ID}`;
+    try {
+      const wasProcessed = sessionStorage.getItem("referralJustProcessed");
+      if (wasProcessed === "true") {
+        setShowWelcomePopup(true);
+        sessionStorage.removeItem("referralJustProcessed");
       }
-
-      if (!startParam) return;
-
-      if (startParam.startsWith("ref_")) {
-        const parts = startParam.split("_");
-        if (parts.length >= 3) {
-          const referrerId = parts[2];
-          await processReferralReward(
-            referrerId,
-            String(user.id)
-          );
-        }
-      }
-    };
-
-    handleReferral();
-  }, [user?.id, processReferralReward, DEV_FORCE_REFERRAL, DEV_REFERRER_ID]);
+    } catch (e) {
+      // sessionStorage may not be available in all environments
+    }
+  }, [user?.id]);
 
   // ======================================
   // GENERATE INVITE LINK
