@@ -114,6 +114,7 @@ const processReferral = async (newUserId, referrerId, user) => {
     // Signal to ReferralContext to show welcome popup
     try {
       sessionStorage.setItem("referralJustProcessed", "true");
+      window.dispatchEvent(new Event("referralProcessed"));
     } catch (e) {
       // sessionStorage may not be available in all environments
     }

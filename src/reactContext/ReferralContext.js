@@ -29,20 +29,36 @@ export const ReferralProvider = ({ children }) => {
 
   // ======================================
   // CHECK IF REFERRAL WAS JUST PROCESSED
-  // (Signal from userManagement.js via sessionStorage)
+  // (Signal from userManagement.js via custom event + sessionStorage fallback)
   // ======================================
   useEffect(() => {
     if (!user?.id) return;
 
-    try {
-      const wasProcessed = sessionStorage.getItem("referralJustProcessed");
-      if (wasProcessed === "true") {
-        setShowWelcomePopup(true);
-        sessionStorage.removeItem("referralJustProcessed");
+    const checkAndShowPopup = () => {
+      try {
+        const wasProcessed = sessionStorage.getItem("referralJustProcessed");
+        if (wasProcessed === "true") {
+          setShowWelcomePopup(true);
+          sessionStorage.removeItem("referralJustProcessed");
+        }
+      } catch (e) {
+        // sessionStorage may not be available in all environments
       }
-    } catch (e) {
-      // sessionStorage may not be available in all environments
-    }
+    };
+
+    // Listen for the event fired by userManagement.js after referral processing
+    const handleReferralProcessed = () => {
+      checkAndShowPopup();
+    };
+
+    window.addEventListener("referralProcessed", handleReferralProcessed);
+
+    // Also do an initial check in case the event already fired before this mounted
+    checkAndShowPopup();
+
+    return () => {
+      window.removeEventListener("referralProcessed", handleReferralProcessed);
+    };
   }, [user?.id]);
 
   // ======================================
