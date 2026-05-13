@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { ref, push, set, onValue, remove, update, get } from "firebase/database";
 import { database } from "../services/FirebaseConfig";
-import { Plus, Pencil, Trash2, X, Save, Zap, LayoutDashboard, Newspaper, FileText, Target, Tag, Layers, Link as LinkIcon, Code } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Save, Zap, LayoutDashboard, Newspaper, FileText, Target, Tag, Layers, Link as LinkIcon, Code, ShieldCheck } from "lucide-react";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import "../Styles/AdminTask.css";
@@ -156,13 +157,55 @@ export default function AdminTask() {
     }
   };
 
+  const location = useLocation();
+
   return (
     <div className="task-admin-page">
       <ToastContainer position="bottom-right" />
 
-      {/* ---------- ADD / EDIT FORM ---------- */}
-      <div className="form-card">
-        <h2 className="form-section-title">{editing ? "Edit Task" : "Add Task"}</h2>
+      {/* ── PREMIUM ADMIN TOPBAR ── */}
+      <div className="admin-topbar">
+        <div className="admin-topbar-inner">
+          <div className="admin-brand">
+            <div className="admin-brand-icon">
+              <ShieldCheck size={20} />
+            </div>
+            <span className="admin-brand-name">Admin Panel</span>
+          </div>
+
+          <nav className="admin-nav-pills">
+            <Link
+              to="/admintask"
+              className={`admin-nav-pill${location.pathname === "/admintask" ? " active" : ""}`}
+            >
+              <LayoutDashboard size={15} />
+              Admin Task
+            </Link>
+            <Link
+              to="/adminNews"
+              className={`admin-nav-pill${location.pathname === "/adminNews" ? " active" : ""}`}
+            >
+              <Newspaper size={15} />
+              Admin News
+            </Link>
+          </nav>
+        </div>
+      </div>
+
+      {/* ── PAGE BODY ── */}
+      <div className="admin-page-body">
+
+        {/* Page Hero */}
+        <div className="admin-page-hero">
+          <h1>Task Management</h1>
+          <p>Create, update and remove tasks across all categories</p>
+        </div>
+
+        {/* ---------- ADD / EDIT FORM ---------- */}
+        <div className="form-card">
+          <h2 className="form-section-title">
+            {editing ? <><Pencil size={18} /> Edit Task</> : <><Plus size={18} /> Add New Task</>}
+          </h2>
 
         <form onSubmit={handleSubmit} className="form-grid">
 
@@ -359,6 +402,7 @@ export default function AdminTask() {
             </tbody>
           </table>
         </div>
+      </div>
       </div>
     </div>
   );

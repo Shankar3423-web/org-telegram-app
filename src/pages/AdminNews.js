@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import {
   ref,
   push,
@@ -12,7 +13,7 @@ import {
   orderByChild
 } from 'firebase/database';
 import { database } from "../services/FirebaseConfig";
-import { Pencil, Trash2, Plus, Save, X, ExternalLink, Newspaper, ThumbsUp } from 'lucide-react';
+import { Pencil, Trash2, Plus, Save, X, ExternalLink, Newspaper, ThumbsUp, LayoutDashboard, ShieldCheck } from 'lucide-react';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import "../Styles/AdminNews.css";
@@ -164,20 +165,57 @@ const AdminNews = () => {
     }
   };
 
+  const location = useLocation();
+
   return (
     <div className="news-manager">
       <ToastContainer position="bottom-right" theme="colored" />
-      <header>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <Newspaper size={28} color="#6366f1" />
-          <h1>News Manager</h1>
+
+      {/* ── PREMIUM ADMIN TOPBAR ── */}
+      <div className="news-admin-topbar">
+        <div className="news-admin-topbar-inner">
+          <div className="news-admin-brand">
+            <div className="news-admin-brand-icon">
+              <ShieldCheck size={20} />
+            </div>
+            <span className="news-admin-brand-name">Admin Panel</span>
+          </div>
+
+          <nav className="news-admin-nav-pills">
+            <Link
+              to="/admintask"
+              className={`news-admin-nav-pill${location.pathname === "/admintask" ? " active" : ""}`}
+            >
+              <LayoutDashboard size={15} />
+              Admin Task
+            </Link>
+            <Link
+              to="/adminNews"
+              className={`news-admin-nav-pill${location.pathname === "/adminNews" ? " active" : ""}`}
+            >
+              <Newspaper size={15} />
+              Admin News
+            </Link>
+          </nav>
         </div>
-        <button className="add-news-btn" onClick={openAddModal}>
-          <Plus size={18} /> Add News
-        </button>
-      </header>
+      </div>
+
+      {/* ── PAGE BODY ── */}
+      <div className="news-admin-body">
+
+        {/* Hero + Add Button */}
+        <div className="news-admin-hero">
+          <div className="news-admin-hero-text">
+            <h1>News Management</h1>
+            <p>Publish, edit and remove news articles</p>
+          </div>
+          <button className="add-news-btn" onClick={openAddModal}>
+            <Plus size={18} /> Add News
+          </button>
+        </div>
 
       <section className="news-list-section">
+
         {isLoading ? (
           <div className="loading">Loading news...</div>
         ) : newsList.length > 0 ? (
@@ -339,6 +377,7 @@ const AdminNews = () => {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };
