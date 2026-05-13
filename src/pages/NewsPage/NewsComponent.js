@@ -13,6 +13,7 @@ import { useNavigate } from "react-router-dom";
 import { ref, query, orderByChild, onValue, update, get, runTransaction } from "firebase/database";
 import { database } from "../../services/FirebaseConfig";
 import { useTelegram } from "../../reactContext/TelegramContext";
+import { incrementTaskProgress } from "../../services/taskService";
 
 export default function NewsComponent() {
   const [newsItems, setNewsItems] = useState([]);
@@ -116,6 +117,9 @@ export default function NewsComponent() {
 
       // Mark news as completed
       await update(taskRef, { [currentNews.id]: dir === "right" });
+
+      // Increment progress for all active news-type tasks (daily, weekly, achievements)
+      await incrementTaskProgress(user.id, 'news', 1);
 
       console.log("News updated:", currentNews.id);
     } catch (err) {

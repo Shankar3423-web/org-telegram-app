@@ -112,9 +112,7 @@ export default function TasksPage() {
 
         const totalReq = task.target || task.total || 1;
 
-        if (task.type === 'news') {
-          completedProgress = newsCount;
-        } else if (task.type === 'game' && gameCompleted) {
+        if (task.type === 'game' && gameCompleted) {
           completedProgress = totalReq;
         }
 
@@ -139,7 +137,7 @@ export default function TasksPage() {
         };
       })
     );
-  }, [tasks, userTasks, IconMap, newsCount, gameCompleted]);
+  }, [tasks, userTasks, IconMap, gameCompleted]);
 
   const dailyTasks = processedTasks.filter(t => t.category === "daily");
   const weeklyTasks = processedTasks.filter(t => t.category === "weekly");
