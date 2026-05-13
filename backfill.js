@@ -15,7 +15,7 @@ async function backfill() {
 
     const { data, error } = await supabase
         .from('clusters')
-        .select('id, set_name, cluster_summary, image_url, created_at, updated_at')
+        .select('id, set_name, cluster_summary, image_url, created_at, updated_at, slug')
         .order('updated_at', { ascending: false });
 
     if (error) {

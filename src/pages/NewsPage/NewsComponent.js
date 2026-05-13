@@ -142,10 +142,18 @@ export default function NewsComponent() {
     controls.set({ x: 0, opacity: 1 });
   }, [currentNewsIndex, controls]);
 
-  // ✅ NEW: Handle "Read More" click → opens blog
+  // ✅ NEW: Handle "Read More" click → opens specific article
   const handleReadMore = () => {
-    // Open the fixed blog URL — not per-news readMoreLink
-    window.open("https://web3today-website.vercel.app/blog", "_blank", "noopener,noreferrer");
+    if (currentNews?.readMoreLink) {
+      // The edge function already generated the perfect readMoreLink for us
+      window.open(currentNews.readMoreLink, "_blank", "noopener,noreferrer");
+    } else if (currentNews?.slug) {
+      // Fallback if readMoreLink is somehow missing but slug exists
+      window.open(`https://web3today-website.vercel.app/article/${currentNews.slug}`, "_blank", "noopener,noreferrer");
+    } else {
+      // Ultimate fallback to the main blog
+      window.open("https://web3today-website.vercel.app/blog", "_blank", "noopener,noreferrer");
+    }
   };
 
   const currentNews = newsItems[currentNewsIndex] || null;
